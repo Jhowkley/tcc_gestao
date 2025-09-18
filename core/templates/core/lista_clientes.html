@@ -1,0 +1,38 @@
+{% extends 'core/base.html' %}
+{% block page_title %}Clientes{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Lista de Clientes</h1>
+    <a href="{% url 'cliente_novo' %}" class="btn btn-success">+ Adicionar Cliente</a>
+</div>
+
+<div class="content-card">
+    <table class="styled-table">
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Telefone</th>
+                <th>Email</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cliente in clientes %}
+            <tr>
+                <td>{{ cliente.nome }}</td>
+                <td>{{ cliente.telefone|default:"N/A" }}</td>
+                <td>{{ cliente.email|default:"N/A" }}</td>
+                <td class="actions">
+                    <a href="{% url 'cliente_editar' pk=cliente.pk %}">Editar</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" style="text-align: center;">Nenhum cliente cadastrado.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

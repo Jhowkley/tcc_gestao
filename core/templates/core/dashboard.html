@@ -1,0 +1,416 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<style>
+    /* Estilos do Dashboard */
+    .dashboard-kpis {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    .kpi-card {
+        background-color: var(--card-bg);
+        border-radius: 8px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start; /* Alinha o texto à esquerda */
+        box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        transition: transform 0.2s;
+        min-height: 120px; /* Garante altura mínima para todos */
+    }
+    .kpi-card:hover {
+        transform: translateY(-5px);
+    }
+    .kpi-card .icon {
+        font-size: 2.5em;
+        margin-bottom: 10px;
+        color: var(--primary-color);
+    }
+    .kpi-card h3 {
+        margin: 0 0 5px 0;
+        color: #555;
+        font-size: 0.9em; /* Títulos menores */
+    }
+    .kpi-card p {
+        font-size: 1.8em;
+        font-weight: bold;
+        color: #333;
+        margin: 0;
+    }
+    .kpi-card.green .icon { color: #28a745; }
+    .kpi-card.orange .icon { color: #ffc107; }
+    .kpi-card.blue .icon { color: var(--primary-color); }
+    .kpi-card.red .icon { color: #dc3545; } /* Novo para Contas a Receber em Aberto */
+
+    .dashboard-charts-products {
+        display: grid;
+        grid-template-columns: 2fr 1fr; /* Gráfico maior, produtos menor */
+        gap: 20px;
+    }
+
+    .chart-card {
+        background-color: var(--card-bg);
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        height: 400px; /* Altura fixa para o gráfico */
+    }
+    canvas#revenueChart {
+       max-height: 100%;
+    }
+    .chart-card h2, .products-card h2 {
+        margin-top: 0;
+        color: #333;
+        font-size: 1.2em;
+        margin-bottom: 20px;
+    }
+
+    .products-card {
+        background-color: var(--card-bg);
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+    }
+    .products-card ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    .products-card li {
+        padding: 10px 0;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.95em;
+    }
+    .products-card li:last-child {
+        border-bottom: none;
+    }
+    .products-card .product-name {
+        font-weight: 500;
+        color: #333;
+    }
+    .products-card .product-qty {
+        background-color: #e0e7ff; /* Um azul claro */
+        color: var(--primary-color);
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.8em;
+        font-weight: bold;
+    }
+
+    /* Estilos para o Assistente de Análise */
+    #chat-widget-container {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+    }
+    #chat-button {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 60px;
+        height: 60px;
+        font-size: 1.8em;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        transition: transform 0.2s;
+    }
+    #chat-button:hover {
+        transform: scale(1.05);
+    }
+    #chat-window {
+        display: none; /* Inicialmente escondida */
+        position: absolute;
+        bottom: 75px; /* Acima do botão */
+        right: 0;
+        width: 350px;
+        height: 500px;
+        background-color: white;
+        border-radius: 10px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        flex-direction: column;
+        overflow: hidden;
+    }
+    .chat-header {
+        background-color: var(--primary-color);
+        color: white;
+        padding: 10px 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 1.1em;
+    }
+    .chat-header .close-btn {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 1.5em;
+        cursor: pointer;
+    }
+    .chat-messages {
+        flex-grow: 1;
+        padding: 15px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        background-color: #f9f9f9;
+    }
+    .chat-message {
+        max-width: 80%;
+        padding: 10px 15px;
+        border-radius: 15px;
+        line-height: 1.4;
+    }
+    .chat-message.user {
+        background-color: var(--primary-color);
+        color: white;
+        align-self: flex-end;
+    }
+    .chat-message.ai {
+        background-color: #e0e0e0;
+        color: #333;
+        align-self: flex-start;
+    }
+    .chat-input {
+        display: flex;
+        padding: 10px 15px;
+        border-top: 1px solid #eee;
+    }
+    .chat-input input {
+        flex-grow: 1;
+        border: 1px solid #ccc;
+        border-radius: 20px;
+        padding: 8px 15px;
+        margin-right: 10px;
+        font-size: 0.9em;
+    }
+    .chat-input button {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 20px;
+        padding: 8px 15px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        font-size: 0.9em;
+    }
+    .chat-input button:hover {
+        background-color: #4338ca;
+    }
+</style>
+
+<div class="dashboard-kpis">
+    <div class="kpi-card blue">
+        <i class="fa-solid fa-cart-shopping icon"></i>
+        <h3>Total de Vendas</h3>
+        <p>{{ total_vendas }}</p>
+    </div>
+    <div class="kpi-card green">
+        <i class="fa-solid fa-hand-holding-dollar icon"></i>
+        <h3>Receita Recebida</h3> {# Alterado para Receita Recebida #}
+        <p>R$ {{ receita_recebida|floatformat:2 }}</p>
+    </div>
+    <div class="kpi-card orange">
+        <i class="fa-solid fa-clock-rotate-left icon"></i>
+        <h3>Vendas Pendentes</h3>
+        <p>{{ vendas_pendentes_count }}</p>
+    </div>
+    <div class="kpi-card green">
+        <i class="fa-solid fa-check-double icon"></i>
+        <h3>Vendas Concluídas</h3>
+        <p>{{ vendas_concluidas_count }}</p>
+    </div>
+    <div class="kpi-card red"> {# NOVO KPI: Contas a Receber em Aberto #}
+        <i class="fa-solid fa-receipt icon"></i>
+        <h3>Contas a Receber (Aberto)</h3>
+        <p>R$ {{ contas_receber_em_aberto_valor|floatformat:2 }}</p>
+    </div>
+</div>
+
+<div class="dashboard-charts-products">
+    <div class="chart-card">
+        <h2>Receita Recebida por Mês</h2> {# Título do gráfico atualizado #}
+        <canvas id="revenueChart"></canvas>
+    </div>
+
+    <div class="products-card">
+        <h2>Produtos Mais Vendidos</h2>
+        <ul>
+            {% for item in produtos_mais_vendidos %}
+                <li>
+                    <span class="product-name">{{ item.produto__nome }}</span>
+                    <span class="product-qty">{{ item.total_quantidade_vendida }} unidades</span>
+                </li>
+            {% empty %}
+                <li>Nenhum produto vendido ainda.</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+<script type="application/json" id="chart-data">
+    {{ chart_data_json|safe }}
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // --- CHATBOT SCRIPT ---
+        const chatButton = document.getElementById('chat-button');
+        const chatWindow = document.getElementById('chat-window');
+        const closeChatBtn = document.getElementById('close-chat-btn');
+        const chatMessages = document.getElementById('chat-messages');
+        const chatInput = document.getElementById('chat-input');
+        const sendChatBtn = document.getElementById('send-chat-btn');
+
+        chatButton.addEventListener('click', function() {
+            chatWindow.style.display = chatWindow.style.display === 'flex' ? 'none' : 'flex';
+            if (chatWindow.style.display === 'flex') {
+                chatInput.focus();
+            }
+        });
+
+        closeChatBtn.addEventListener('click', function() {
+            chatWindow.style.display = 'none';
+        });
+
+        function addMessage(text, sender) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('chat-message', sender);
+            msgDiv.textContent = text;
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight; // Auto scroll to bottom
+        }
+
+        sendChatBtn.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        addMessage("Olá. Como posso ajudar?", "ai"); // Initial AI message
+
+        function sendMessage() {
+            const question = chatInput.value.trim();
+            if (question) {
+                addMessage(question, 'user');
+                chatInput.value = '';
+                
+                fetch('/api/ask/', { // Ensure this URL is correct
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') // Function to get CSRF token
+                    },
+                    body: JSON.stringify({ question: question })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    addMessage(data.answer || data.error, 'ai');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    addMessage('Desculpe, houve um erro ao processar sua pergunta.', 'ai');
+                });
+            }
+        }
+
+        // Function to get CSRF token for Django AJAX requests
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.startsWith(name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // --- CHART.JS SCRIPT ---
+        const ctx = document.getElementById('revenueChart').getContext('2d');
+        console.log(ctx);
+        const chartDataElement = document.getElementById('chart-data');
+        console.log(chartDataElement.textContent);
+        
+        let chartData = { labels: [], data: [] };
+        if (chartDataElement) {
+            try {
+                const jsonText = chartDataElement.textContent.trim();
+                if (jsonText && jsonText !== '{}') {
+                    chartData = JSON.parse(jsonText);
+                }
+            } catch (e) {
+                console.error("Erro ao fazer parse do JSON do gráfico:", e);
+                console.error("JSON recebido:", jsonText);
+            }
+            
+            }
+        }
+
+        const revenueChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    label: 'Receita Recebida (R$)',
+                    data: chartData.data,
+                    backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                    borderColor: 'rgba(79, 70, 229, 1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Valor (R$)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Mês/Ano'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false // Não exibir a legenda do dataset
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `R$ ${context.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

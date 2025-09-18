@@ -1,0 +1,38 @@
+{% extends 'core/base.html' %}
+{% block page_title %}Fornecedores{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Lista de Fornecedores</h1>
+    <a href="{% url 'fornecedor_novo' %}" class="btn btn-success">+ Adicionar Fornecedor</a>
+</div>
+
+<div class="content-card">
+    <table class="styled-table">
+        <thead>
+            <tr>
+                <th>Nome da Empresa</th>
+                <th>Nome do Contato</th>
+                <th>Telefone</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for fornecedor in fornecedores %}
+            <tr>
+                <td>{{ fornecedor.nome_empresa }}</td>
+                <td>{{ fornecedor.contato_nome|default:"N/A" }}</td>
+                <td>{{ fornecedor.telefone|default:"N/A" }}</td>
+                <td class="actions">
+                    <a href="{% url 'fornecedor_editar' pk=fornecedor.pk %}">Editar</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" style="text-align: center;">Nenhum fornecedor cadastrado.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

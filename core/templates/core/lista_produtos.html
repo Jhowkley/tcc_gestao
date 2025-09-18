@@ -1,0 +1,38 @@
+{% extends 'core/base.html' %}
+{% block page_title %}Produtos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Lista de Produtos</h1>
+    <a href="{% url 'produto_novo' %}" class="btn btn-success">+ Adicionar Produto</a>
+</div>
+
+<div class="content-card">
+    <table class="styled-table">
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Fornecedor</th>
+                <th>Preço de Venda</th>
+                <th>Estoque</th>
+                <th class="actions">Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for produto in produtos %}
+            <tr>
+                <td>{{ produto.nome }}</td>
+                <td>{{ produto.fornecedor.nome_empresa|default:"N/A" }}</td>
+                <td>R$ {{ produto.preco_venda }}</td>
+                <td>{{ produto.quantidade_estoque }}</td>
+                <td class="actions"><a href="{% url 'produto_editar' pk=produto.pk %}">Editar</a></td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" style="text-align: center;">Nenhum produto cadastrado.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

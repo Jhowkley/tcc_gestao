@@ -1,0 +1,186 @@
+{% extends 'core/base.html' %}
+{% load app_filters %} {# Carrega o filtro personalizado #}
+
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<style>
+    .form-container { max-width: 600px; margin: auto; background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+    .form-container h1 { text-align: center; margin-bottom: 20px; color: #333; }
+    
+    .form-container p {
+        margin-bottom: 15px;
+    }
+    .form-container label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+        color: #333;
+    }
+    .form-container input[type="text"],
+    .form-container input[type="number"],
+    .form-container input[type="email"], /* Adicionado para email */
+    .form-container input[type="tel"],   /* Adicionado para telefone */
+    .form-container select,
+    .form-container textarea { /* Adicionado para textareas futuras */
+        width: calc(100% - 22px);
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 1em;
+        box-sizing: border-box;
+    }
+    .form-container button[type="submit"] {
+        background-color: var(--primary-color);
+        color: white;
+        padding: 12px 25px;
+        border: none;
+        border-radius: 8px;
+        font-size: 1.1em;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        width: 100%;
+        margin-top: 20px;
+    }
+    .form-container button[type="submit"]:hover {
+        background-color: #4338ca;
+    }
+    #product-price-display {
+        font-size: 0.9em;
+        font-weight: normal;
+        color: #6b7280;
+        margin-top: -10px;
+        margin-bottom: 15px;
+        min-height: 20px;
+        padding-left: 2px;
+    }
+    .errorlist {
+        color: #dc3545;
+        list-style-type: none;
+        padding: 0;
+        margin-top: 5px;
+        font-size: 0.9em;
+    }
+    .errorlist li {
+        margin-bottom: 3px;
+    }
+    .hidden-field {
+        display: none;
+    }
+</style>
+
+<div class="form-container">
+    <h1>{{ titulo }}</h1>
+    <form method="post" id="main-form">
+        {% csrf_token %}
+        
+        {# Lógica condicional para renderizar o formulário #}
+        {% if form.instance|get_class_name == 'Venda' %}
+            {# Renderização específica para formulário de Venda #}
+            <p>
+                {{ form.produto.label_tag }}
+                {{ form.produto }}
+                {% if form.produto.errors %}<ul class="errorlist">{% for error in form.produto.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+                <div id="product-price-display"></div>
+            </p>
+            <p>
+                {{ form.cliente.label_tag }}
+                {{ form.cliente }}
+                {% if form.cliente.errors %}<ul class="errorlist">{% for error in form.cliente.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </p>
+            <p>
+                {{ form.quantidade.label_tag }}
+                {{ form.quantidade }}
+                {% if form.quantidade.errors %}<ul class="errorlist">{% for error in form.quantidade.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </p>
+            <p>
+                {{ form.status.label_tag }}
+                {{ form.status }}
+                {% if form.status.errors %}<ul class="errorlist">{% for error in form.status.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </p>
+             <p>
+                {{ form.forma_pagamento.label_tag }}
+                {{ form.forma_pagamento }}
+                {% if form.forma_pagamento.errors %}<ul class="errorlist">{% for error in form.forma_pagamento.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </p>
+            <p id="condicao-prazo-field" class="{% if form.instance.forma_pagamento != 'AP' and form.instance.forma_pagamento %} hidden-field {% endif %}">
+                {{ form.condicao_prazo.label_tag }}
+                {{ form.condicao_prazo }}
+                {% if form.condicao_prazo.errors %}<ul class="errorlist">{% for error in form.condicao_prazo.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </p>
+        {% else %}
+            {# Renderização padrão para outros formulários #}
+            {{ form.as_p }}
+        {% endif %}
+
+        <button type="submit">Salvar</button>
+    </form>
+</div>
+
+{# Este script tag é importante para passar o JSON de forma segura #}
+<script id="product-prices-data" type="application/json" style="display: none;">
+    {% if form.instance|get_class_name == 'Venda' %}
+        {{ product_prices_json|safe }}
+    {% else %}
+        {} {# Retorna JSON vazio para outros formulários #}
+    {% endif %}
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const productPricesJsonElement = document.getElementById('product-prices-data');
+    const productSelect = document.querySelector('#id_produto');
+    const priceDisplay = document.getElementById('product-price-display');
+    
+    let productPrices = {};
+    if (productPricesJsonElement) {
+        try {
+            // Verifica se o JSON não está vazio antes de tentar fazer parse
+            const jsonText = productPricesJsonElement.textContent.trim();
+            if (jsonText && jsonText !== '{}') {
+                productPrices = JSON.parse(jsonText);
+            }
+        } catch (e) {
+            console.error("Erro ao fazer parse do JSON de preços:", e);
+        }
+    }
+
+    if (productSelect && priceDisplay) {
+        function updatePrice() {
+            const selectedProductId = productSelect.value;
+            if (selectedProductId && productPrices[selectedProductId]) {
+                const price = parseFloat(productPrices[selectedProductId]);
+                priceDisplay.textContent = `Preço Unitário: ${price.toLocaleString('pt-BR', {
+                    style: 'currency',
+                    currency: 'BRL'
+                })}`;
+            } else {
+                priceDisplay.textContent = '';
+            }
+        }
+
+        productSelect.addEventListener('change', updatePrice);
+        updatePrice();
+    }
+    const formaPagamentoSelect = document.querySelector('#id_forma_pagamento');
+    const condicaoPrazoField = document.querySelector('#condicao-prazo-field');
+
+    if (formaPagamentoSelect && condicaoPrazoField) {
+        function toggleCondicaoPrazo() {
+            if (formaPagamentoSelect.value === 'AP') { // 'AP' é o valor para "A Prazo"
+                condicaoPrazoField.style.display = 'block'; // Mostra o campo
+                condicaoPrazoField.querySelector('select').required = true; // Torna obrigatório
+            } else {
+                condicaoPrazoField.style.display = 'none'; // Esconde o campo
+                condicaoPrazoField.querySelector('select').required = false; // Não é obrigatório
+                condicaoPrazoField.querySelector('select').value = ''; // Limpa o valor
+            }
+        }
+
+        // Adiciona o evento de 'change' e executa uma vez ao carregar a página
+        formaPagamentoSelect.addEventListener('change', toggleCondicaoPrazo);
+        toggleCondicaoPrazo(); // Chama ao carregar para definir o estado inicial
+    }
+});
+</script>
+{% endblock %}

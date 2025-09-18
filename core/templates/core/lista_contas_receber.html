@@ -1,0 +1,53 @@
+{% extends 'core/base.html' %}
+{% block page_title %}Contas a Receber{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Contas a Receber</h1>
+    <a href="{% url 'conta_receber_nova' %}" class="btn btn-success">+ Adicionar Conta</a>
+</div>
+
+<div class="content-card">
+    <table class="styled-table">
+        <thead>
+            <tr>
+                <th>Descrição</th>
+                <th>Cliente</th>
+                <th>Venda Relacionada</th>
+                <th>Valor</th>
+                <th>Vencimento</th>
+                <th>Status</th>
+                <th>Recebimento</th>
+                <th class="actions">Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for conta in contas %}
+            <tr>
+                <td>{{ conta.descricao }}</td>
+                <td>{{ conta.cliente.nome|default:"N/A" }}</td>
+                <td>{% if conta.venda %}<a href="{% url 'venda_nova' %}?venda_id={{ conta.venda.pk }}">Venda #{{ conta.venda.pk }}</a>{% else %}-{% endif %}</td>
+                <td>R$ {{ conta.valor|floatformat:2 }}</td>
+                <td>{{ conta.data_vencimento|date:"d/m/Y" }}</td>
+                <td>
+                    <span class="status-{{ conta.status|lower }}">
+                        {{ conta.get_status_display }}
+                    </span>
+                </td>
+                <td>{{ conta.data_recebimento|date:"d/m/Y"|default:"-" }}</td>
+                <td class="actions">
+                    <a href="{% url 'conta_receber_editar' pk=conta.pk %}">Editar</a>
+                    {% if conta.status != 'RECEBIDO' %}
+                        <a href="{% url 'marcar_conta_receber_recebida' pk=conta.pk %}" class="btn" style="padding: 5px 10px; font-size: 12px; margin-left: 10px; color: white;">Receber</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="8" style="text-align: center;">Nenhuma conta a receber registrada.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

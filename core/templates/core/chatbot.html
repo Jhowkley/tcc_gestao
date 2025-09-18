@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analista de Dados IA</title>
+    <style>
+        /* Estilos básicos para o chat */
+        body { font-family: sans-serif; background-color: #f4f4f9; }
+        #chat-container { max-width: 700px; margin: 50px auto; border: 1px solid #ddd; border-radius: 8px; background-color: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; flex-direction: column; height: 80vh; }
+        #chat-messages { flex-grow: 1; padding: 20px; overflow-y: auto; border-bottom: 1px solid #ddd; }
+        .message { margin-bottom: 15px; padding: 10px 15px; border-radius: 20px; max-width: 80%; }
+        .user-message { background-color: #007bff; color: white; align-self: flex-end; margin-left: auto; }
+        .bot-message { background-color: #e9ecef; color: #495057; align-self: flex-start; }
+        #chat-form { display: flex; padding: 20px; }
+        #chat-input { flex-grow: 1; border: 1px solid #ccc; border-radius: 20px; padding: 10px 15px; font-size: 16px; }
+        #chat-submit { background-color: #007bff; color: white; border: none; border-radius: 50%; width: 50px; height: 50px; margin-left: 10px; cursor: pointer; font-size: 20px; }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="chat-messages">
+            <div class="message bot-message">
+                Olá! Sou seu analista de dados. Como posso ajudar a analisar as vendas hoje?
+            </div>
+        </div>
+        <form id="chat-form">
+            <input type="text" id="chat-input" placeholder="Faça uma pergunta sobre os dados..." autocomplete="off">
+            <button type="submit" id="chat-submit">&#10148;</button>
+        </form>
+    </div>
+
+<script>
+    const chatMessages = document.getElementById('chat-messages');
+    const chatForm = document.getElementById('chat-form');
+    const chatInput = document.getElementById('chat-input');
+
+    chatForm.addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const userMessage = chatInput.value;
+        if (userMessage.trim() === '') return;
+
+        appendMessage(userMessage, 'user-message');
+        chatInput.value = '';
+
+        fetch('/api/ask/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ question: userMessage })
+        })
+        .then(response => response.json())
+        .then(data => {
+            const botAnswer = data.answer || data.error || 'Não foi possível obter uma resposta.';
+            appendMessage(botAnswer, 'bot-message');
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            appendMessage('Houve um erro de comunicação com o servidor.', 'bot-message');
+        });
+    });
+
+    function appendMessage(message, className) {
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('message', className);
+        messageDiv.textContent = message;
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+</script>
+</body>
+</html>

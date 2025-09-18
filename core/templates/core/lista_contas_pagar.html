@@ -1,0 +1,51 @@
+{% extends 'core/base.html' %}
+{% block page_title %}Contas a Pagar{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Contas a Pagar</h1>
+    <a href="{% url 'conta_pagar_nova' %}" class="btn btn-success">+ Adicionar Conta</a>
+</div>
+
+<div class="content-card">
+    <table class="styled-table">
+        <thead>
+            <tr>
+                <th>Descrição</th>
+                <th>Fornecedor</th>
+                <th>Valor</th>
+                <th>Vencimento</th>
+                <th>Status</th>
+                <th>Pagamento</th>
+                <th class="actions">Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for conta in contas_pagar %}
+            <tr>
+                <td>{{ conta.descricao }}</td>
+                <td>{{ conta.fornecedor.nome_empresa|default:"N/A" }}</td>
+                <td>R$ {{ conta.valor|floatformat:2 }}</td>
+                <td>{{ conta.data_vencimento|date:"d/m/Y" }}</td>
+                <td>
+                    <span class="status-{{ conta.status|lower }}">
+                        {{ conta.get_status_display }}
+                    </span>
+                </td>
+                <td>{{ conta.data_pagamento|date:"d/m/Y"|default:"-" }}</td>
+                <td class="actions">
+                    <a href="{% url 'conta_pagar_editar' pk=conta.pk %}">Editar</a>
+                    {% if conta.status != 'PAGO' %}
+                        <a href="{% url 'marcar_conta_pagar_paga' pk=conta.pk %}" class="btn" style="padding: 5px 10px; font-size: 12px; margin-left: 10px; color: white;">Pagar</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7" style="text-align: center;">Nenhuma conta a pagar registrada.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

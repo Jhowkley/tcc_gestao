@@ -1,5 +1,5 @@
 {% extends 'core/base.html' %}
-{% load app_filters %} {# Carrega o filtro personalizado #}
+{% load app_filters %} 
 
 {% block title %}{{ titulo }}{% endblock %}
 
@@ -74,9 +74,7 @@
     <form method="post" id="main-form">
         {% csrf_token %}
         
-        {# Lógica condicional para renderizar o formulário #}
         {% if form.instance|get_class_name == 'Venda' %}
-            {# Renderização específica para formulário de Venda #}
             <p>
                 {{ form.produto.label_tag }}
                 {{ form.produto }}
@@ -109,7 +107,6 @@
                 {% if form.condicao_prazo.errors %}<ul class="errorlist">{% for error in form.condicao_prazo.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
             </p>
         {% else %}
-            {# Renderização padrão para outros formulários #}
             {{ form.as_p }}
         {% endif %}
 
@@ -117,12 +114,11 @@
     </form>
 </div>
 
-{# Este script tag é importante para passar o JSON de forma segura #}
 <script id="product-prices-data" type="application/json" style="display: none;">
     {% if form.instance|get_class_name == 'Venda' %}
         {{ product_prices_json|safe }}
     {% else %}
-        {} {# Retorna JSON vazio para outros formulários #}
+        {} 
     {% endif %}
 </script>
 
@@ -135,7 +131,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let productPrices = {};
     if (productPricesJsonElement) {
         try {
-            // Verifica se o JSON não está vazio antes de tentar fazer parse
             const jsonText = productPricesJsonElement.textContent.trim();
             if (jsonText && jsonText !== '{}') {
                 productPrices = JSON.parse(jsonText);
@@ -167,19 +162,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (formaPagamentoSelect && condicaoPrazoField) {
         function toggleCondicaoPrazo() {
-            if (formaPagamentoSelect.value === 'AP') { // 'AP' é o valor para "A Prazo"
-                condicaoPrazoField.style.display = 'block'; // Mostra o campo
-                condicaoPrazoField.querySelector('select').required = true; // Torna obrigatório
+            if (formaPagamentoSelect.value === 'AP') { 
+                condicaoPrazoField.style.display = 'block';
+                condicaoPrazoField.querySelector('select').required = true; 
             } else {
-                condicaoPrazoField.style.display = 'none'; // Esconde o campo
-                condicaoPrazoField.querySelector('select').required = false; // Não é obrigatório
-                condicaoPrazoField.querySelector('select').value = ''; // Limpa o valor
+                condicaoPrazoField.style.display = 'none';
+                condicaoPrazoField.querySelector('select').required = false; 
+                condicaoPrazoField.querySelector('select').value = '';
             }
         }
 
-        // Adiciona o evento de 'change' e executa uma vez ao carregar a página
         formaPagamentoSelect.addEventListener('change', toggleCondicaoPrazo);
-        toggleCondicaoPrazo(); // Chama ao carregar para definir o estado inicial
+        toggleCondicaoPrazo(); 
     }
 });
 </script>

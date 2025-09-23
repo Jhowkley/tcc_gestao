@@ -1,4 +1,5 @@
 import json
+import re 
 import pandas as pd
 import google.generativeai as genai
 from django.shortcuts import render, redirect, get_object_or_404
@@ -7,11 +8,16 @@ from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.db.models import Sum, Count
 from django.db.models.functions import TruncMonth
+from sqlglot import logger
 from .forms import ProdutoForm, ClienteForm, VendaForm, ContaReceberForm, ContaPagarForm, CategoriaForm, FornecedorForm 
-from .models import Produto, Cliente, Venda, ContaReceber, ContaPagar, Categoria, Fornecedor
+from .models import Produto, Cliente, Venda, ContaReceber, ContaPagar, Categoria, Fornecedor, ChatMessage
 from datetime import date, timedelta
 from decimal import Decimal
+from string import Template
+from .prompts import create_intention_prompt
+import logging
 
+logger = logging.getLogger(__name__)
 
 def dashboard_view(request):
 
@@ -75,7 +81,7 @@ def dashboard_view(request):
     return render(request, 'core/dashboard.html', context)
 
 
-def lista_categorias_view(request): # Renomeado
+def lista_categorias_view(request):
     categorias = Categoria.objects.all()
     return render(request, 'core/lista_categorias.html', {'categorias': categorias})
 
@@ -104,8 +110,7 @@ def categoria_delete_view(request, pk):
         return redirect('lista_categorias')
     return render(request, 'core/confirm_delete.html', {'instance': categoria, 'titulo': 'Deletar Categoria'})
 
-# --- Views de CRUD para Fornecedor ---
-def lista_fornecedores_view(request): # Renomeado
+def lista_fornecedores_view(request): 
     fornecedores = Fornecedor.objects.all()
     return render(request, 'core/lista_fornecedores.html', {'fornecedores': fornecedores})
 
@@ -145,7 +150,7 @@ def produto_form_view(request, pk=None):
         titulo = "Editar Produto"
     else:
         instance = None
-        titulo = "Adicionar Produto" # Mudado de 'produto_novo' para 'Adicionar Produto' para a UI
+        titulo = "Adicionar Produto"
 
     if request.method == 'POST':
         form = ProdutoForm(request.POST, instance=instance)
@@ -157,7 +162,7 @@ def produto_form_view(request, pk=None):
 
     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo})
 
-def produto_delete_view(request, pk): # Adicionado
+def produto_delete_view(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     if request.method == 'POST':
         produto.delete()
@@ -165,8 +170,7 @@ def produto_delete_view(request, pk): # Adicionado
     return render(request, 'core/confirm_delete.html', {'instance': produto, 'titulo': 'Deletar Produto'})
 
 
-# --- Views de CRUD para Cliente ---
-def lista_clientes_view(request): # Renomeado
+def lista_clientes_view(request):
     clientes = Cliente.objects.all()
     return render(request, 'core/lista_clientes.html', {'clientes': clientes})
 
@@ -176,7 +180,7 @@ def cliente_form_view(request, pk=None):
         titulo = "Editar Cliente"
     else:
         instance = None
-        titulo = "Adicionar Cliente" # Mudado de 'cliente_novo' para 'Adicionar Cliente' para a UI
+        titulo = "Adicionar Cliente" 
 
     if request.method == 'POST':
         form = ClienteForm(request.POST, instance=instance)
@@ -188,7 +192,7 @@ def cliente_form_view(request, pk=None):
 
     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo})
 
-def cliente_delete_view(request, pk): # Adicionado
+def cliente_delete_view(request, pk): 
     cliente = get_object_or_404(Cliente, pk=pk)
     if request.method == 'POST':
         cliente.delete()
@@ -196,8 +200,7 @@ def cliente_delete_view(request, pk): # Adicionado
     return render(request, 'core/confirm_delete.html', {'instance': cliente, 'titulo': 'Deletar Cliente'})
 
 
-# --- Views de CRUD para Venda ---
-def lista_vendas_view(request): # Renomeado
+def lista_vendas_view(request):
     vendas = Venda.objects.all().select_related('produto', 'cliente').order_by('-data_venda')
     return render(request, 'core/lista_vendas.html', {'vendas': vendas})
 
@@ -221,50 +224,43 @@ def venda_form_view(request, pk=None):
             venda = form.save(commit=False)
             produto = venda.produto 
 
-            # Lógica de controle de estoque (sem alterações aqui, parece ok)
-            if instance: # Se for uma edição
+            if instance: 
                 old_venda = Venda.objects.get(pk=instance.pk)
-                if old_venda.produto == produto: # Mesmo produto
-                    if venda.quantidade > old_venda.quantidade: # Aumentou a quantidade
+                if old_venda.produto == produto: 
+                    if venda.quantidade > old_venda.quantidade:
                         if produto.quantidade_estoque < (venda.quantidade - old_venda.quantidade):
                             form.add_error('quantidade', f"Estoque insuficiente. Apenas {produto.quantidade_estoque} unidades disponíveis para adicionar.")
                             return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo, 'product_prices_json': json.dumps(product_prices)})
-                    elif venda.quantidade < old_venda.quantidade: # Diminuiu a quantidade
-                        produto.quantidade_estoque += (old_venda.quantidade - venda.quantidade) # Ajuste de estoque se a quantidade DIMINUIU
-                else: # Produto foi alterado
-                    # Devolve estoque do produto antigo
+                    elif venda.quantidade < old_venda.quantidade:
+                        produto.quantidade_estoque += (old_venda.quantidade - venda.quantidade) 
+                else:
                     old_venda.produto.quantidade_estoque += old_venda.quantidade
                     old_venda.produto.save()
-                    # Retira estoque do novo produto
                     if produto.quantidade_estoque < venda.quantidade:
                         form.add_error('quantidade', f"Estoque insuficiente para o novo produto. Apenas {produto.quantidade_estoque} unidades disponíveis.")
                         return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo, 'product_prices_json': json.dumps(product_prices)})
                     produto.quantidade_estoque -= venda.quantidade
-            else: # Nova venda
+            else: 
                 if produto.quantidade_estoque < venda.quantidade:
                     form.add_error('quantidade', f"Estoque insuficiente. Apenas {produto.quantidade_estoque} unidades disponíveis.")
                     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo, 'product_prices_json': json.dumps(product_prices)})
                 produto.quantidade_estoque -= venda.quantidade
 
-            # Salvar o produto e a venda DEPOIS de toda a lógica de estoque
+
             produto.save()
             print(f"DEBUG: Estoque do produto {produto.nome} atualizado para {produto.quantidade_estoque}.")
-            venda.save() # Salva a venda no banco de dados
+            venda.save()
             print(f"DEBUG: Venda salva no banco de dados com PK: {venda.pk}")
-            print(f"DEBUG: Status da venda APÓS save(): {venda.status}") # <-- NOVO PRINT IMPORTANTÍSSIMO
-            print(f"DEBUG: Forma de pagamento da venda: {venda.forma_pagamento}") # <-- NOVO PRINT
-            print(f"DEBUG: Condição de prazo da venda: {venda.condicao_prazo}") # <-- NOVO PRINT
+            print(f"DEBUG: Status da venda APÓS save(): {venda.status}") 
+            print(f"DEBUG: Forma de pagamento da venda: {venda.forma_pagamento}") 
+            print(f"DEBUG: Condição de prazo da venda: {venda.condicao_prazo}")
 
-            # --- LÓGICA DE CRIAÇÃO/ATUALIZAÇÃO DE CONTA A RECEBER ---
             if venda.status == 'CONCLUIDA':
                 print("DEBUG: Venda CONCLUIDA. Processando Conta a Receber.")
                 
-                # Definições padrão para CR
                 data_vencimento = date.today()
                 status_cr = 'ABERTO' 
                 data_recebimento_cr = None
-
-                # Ajusta data de vencimento se for a prazo
                 if venda.forma_pagamento == 'AP' and venda.condicao_prazo:
                     print(f"DEBUG: Venda a Prazo ({venda.condicao_prazo}). Calculando data de vencimento.")
                     if venda.condicao_prazo == '7D':
@@ -274,7 +270,6 @@ def venda_form_view(request, pk=None):
                     elif venda.condicao_prazo == '28D':
                         data_vencimento += timedelta(days=28)
                 
-                # Se for à vista, muda status e data de recebimento
                 if venda.forma_pagamento == 'AV':
                     print("DEBUG: Venda à Vista. Definindo Conta a Receber como RECEBIDO.")
                     status_cr = 'RECEBIDO' 
@@ -294,7 +289,6 @@ def venda_form_view(request, pk=None):
                         }
                     )
                     if not created:
-                        # Se não foi criada (já existia), atualiza os campos
                         conta_receber.cliente = venda.cliente
                         conta_receber.descricao = f"Recebimento de Venda #{venda.pk} - {venda.produto.nome}"
                         conta_receber.valor = venda.valor_total
@@ -306,9 +300,8 @@ def venda_form_view(request, pk=None):
                     else:
                         print(f"DEBUG: Nova Conta a Receber CRIADA para venda PK: {venda.pk}.")
                 except Exception as e:
-                    print(f"ERROR: Erro crítico ao criar/atualizar ContaReceber para venda PK {venda.pk}: {e}") # <-- Capture qualquer erro aqui
+                    print(f"ERROR: Erro crítico ao criar/atualizar ContaReceber para venda PK {venda.pk}: {e}") 
             
-            # Lógica para DELETAR ContaReceber se a venda era CONCLUIDA e foi para PENDENTE
             elif instance and instance.status == 'CONCLUIDA' and venda.status == 'PENDENTE':
                 print("DEBUG: Venda alterada de CONCLUIDA para PENDENTE. Excluindo Conta a Receber existente.")
                 try:
@@ -336,7 +329,7 @@ def venda_form_view(request, pk=None):
     }
     return render(request, 'core/form_generico.html', context)
 
-def venda_delete_view(request, pk): # Adicionado
+def venda_delete_view(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
     if request.method == 'POST':
         produto = venda.produto
@@ -355,26 +348,25 @@ def venda_delete_view(request, pk): # Adicionado
 
 
 def lista_contas_receber_view(request):
-    print("\nDEBUG: Acessando lista_contas_receber_view.") # Debug point 1
+    print("\nDEBUG: Acessando lista_contas_receber_view.") 
     
     contas = ContaReceber.objects.all().select_related('venda__produto', 'cliente', 'venda').order_by('-data_vencimento')
     
-    print(f"DEBUG: Total de Contas a Receber carregadas: {contas.count()}") # Debug point 2
+    print(f"DEBUG: Total de Contas a Receber carregadas: {contas.count()}") 
     
     if contas.exists():
         print("DEBUG: Detalhes das Contas a Receber carregadas:")
         for conta in contas:
-            # Note o uso de .pk para IDs e .valor para o campo Decimal
             print(f"DEBUG: CR ID: {conta.pk}, Venda PK: {conta.venda.pk if conta.venda else 'N/A'}, Cliente: {conta.cliente.nome if conta.cliente else 'N/A'}, Valor: {conta.valor}, Status: {conta.status}, Vencimento: {conta.data_vencimento}") # Debug point 3
     else:
-        print("DEBUG: Nenhuma Conta a Receber encontrada no banco de dados.") # Debug point 4
+        print("DEBUG: Nenhuma Conta a Receber encontrada no banco de dados.")
 
     context = {
-        'contas': contas, # Usando 'contas' como o nome da variável no template
+        'contas': contas,
         'titulo': 'Contas a Receber',
-        'ativo_cr': 'active', # Adicione se estiver usando para realçar o link no menu
+        'ativo_cr': 'active', 
     }
-    print("DEBUG: Contexto para template de Contas a Receber preparado.") # Debug point 5
+    print("DEBUG: Contexto para template de Contas a Receber preparado.") 
     return render(request, 'core/lista_contas_receber.html', context)
 
 def conta_receber_form_view(request, pk=None):
@@ -383,7 +375,7 @@ def conta_receber_form_view(request, pk=None):
         titulo = "Editar Conta a Receber"
     else:
         instance = None
-        titulo = "Adicionar Conta a Receber" # Mudado de 'conta_receber_nova' para 'Adicionar Conta a Receber' para a UI
+        titulo = "Adicionar Conta a Receber" 
 
     if request.method == 'POST':
         form = ContaReceberForm(request.POST, instance=instance)
@@ -402,7 +394,7 @@ def conta_receber_delete_view(request, pk): # Adicionado
         return redirect('lista_contas_receber')
     return render(request, 'core/confirm_delete.html', {'instance': conta, 'titulo': 'Deletar Conta a Receber'})
 
-@csrf_exempt # Para permitir POST sem token CSRF para esta função simples de marcar
+@csrf_exempt
 def marcar_conta_receber_recebida(request, pk):
     if request.method == 'GET':
         conta = get_object_or_404(ContaReceber, pk=pk)
@@ -416,12 +408,12 @@ def marcar_conta_receber_recebida(request, pk):
 
 
 
-def lista_contas_pagar_view(request): # Renomeado
+def lista_contas_pagar_view(request): 
     contas = ContaPagar.objects.all().select_related('fornecedor').order_by('-data_vencimento')
     context ={
         'contas_pagar': contas,
         'titulo': 'Contas a Pagar',
-        'ativo_cp': 'active', # Adicione se estiver usando para realçar o link no menu
+        'ativo_cp': 'active', 
     }
     return render(request, 'core/lista_contas_pagar.html', context)
 
@@ -431,7 +423,7 @@ def conta_pagar_form_view(request, pk=None):
         titulo = "Editar Conta a Pagar"
     else:
         instance = None
-        titulo = "Adicionar Conta a Pagar" # Mudado de 'conta_pagar_nova' para 'Adicionar Conta a Pagar' para a UI
+        titulo = "Adicionar Conta a Pagar" 
 
     if request.method == 'POST':
         form = ContaPagarForm(request.POST, instance=instance)
@@ -443,14 +435,14 @@ def conta_pagar_form_view(request, pk=None):
 
     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo})
 
-def conta_pagar_delete_view(request, pk): # Adicionado
+def conta_pagar_delete_view(request, pk):
     conta = get_object_or_404(ContaPagar, pk=pk)
     if request.method == 'POST':
         conta.delete()
         return redirect('lista_contas_pagar')
     return render(request, 'core/confirm_delete.html', {'instance': conta, 'titulo': 'Deletar Conta a Pagar'})
 
-@csrf_exempt # Para permitir POST sem token CSRF para esta função simples de marcar
+@csrf_exempt 
 def marcar_conta_pagar_paga(request, pk):
     if request.method == 'POST':
         conta = get_object_or_404(ContaPagar, pk=pk)
@@ -467,260 +459,414 @@ def marcar_conta_pagar_paga(request, pk):
 def ask_api_view(request):
     if request.method == 'POST':
         try:
+            raw_body = request.body.decode('utf-8')
+            logger.info(f"Raw Request Body: {raw_body}")
             data = json.loads(request.body)
             question = data.get('question')
+            session_id = data.get('session_id')
+            logger.info(f"Parsed Question: '{question}', Parsed Session ID: '{session_id}'")
+            print(f"DEBUG: Pergunta recebida: '{question}' para sessão: '{session_id}'")
 
-            print(f"DEBUG: Pergunta recebida: '{question}'") # Debug point 1
+            if not question or not session_id:
+                print("ERROR: Nenhuma pergunta ou session_id fornecido.")
+                return JsonResponse({'error': 'Nenhuma pergunta ou ID de sessão fornecido.'}, status=400)
 
-            if not question:
-                print("ERROR: Nenhuma pergunta fornecida.") # Debug point 2
-                return JsonResponse({'error': 'Nenhuma pergunta fornecida.'}, status=400)
+            db_history = ChatMessage.objects.filter(session_id=session_id).order_by('timestamp')
+            chat_history_gemini_format = []
+            chat_history_for_prompt = []
 
-            # --- Início do bloco principal de lógica ---
+            for msg in db_history:
+                gemini_role = 'user' if msg.role == 'user' else 'model'
+                chat_history_gemini_format.append({'role': gemini_role, 'parts': [{'text': msg.content}]})
+                chat_history_for_prompt.append({'role': msg.role, 'parts': [{'text': msg.content}]})
+            
+            print(f"DEBUG: Histórico de chat recuperado ({len(db_history)} mensagens).")
+
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            
+            intention_prompt_content = create_intention_prompt(question, chat_history_for_prompt)
+            print(f"DEBUG: Prompt de intenção para Gemini: \n{intention_prompt_content[:500]}...")
+            
+            chat_for_intention = genai.GenerativeModel('gemini-2.0-flash').start_chat(history=chat_history_gemini_format)
+            intention_response = chat_for_intention.send_message(intention_prompt_content)
+            
             try:
-                vendas_queryset = Venda.objects.select_related('produto', 'cliente')
-                contas_receber_queryset = ContaReceber.objects.select_related('venda__produto', 'cliente', 'venda')
-                contas_pagar_queryset = ContaPagar.objects.select_related('fornecedor')
+                intention_category_str = re.search(r'\d', intention_response.text.strip())
+                if intention_category_str:
+                    intention_category = int(intention_category_str.group(0))
+                else:
+                    raise ValueError("Nenhum número de categoria encontrado na resposta.")
+            except ValueError:
+                print(f"WARNING: Não foi possível classificar a intenção, resposta bruta: '{intention_response.text}'. Assumindo análise de dados aprofundada (categoria 2).")
+                intention_category = 2 
 
-                print("DEBUG: Querysets de dados obtidos.") # Debug point 3
+            print(f"DEBUG: Intenção detectada: {intention_category}")
 
-                dados_vendas = []
-                for v in vendas_queryset:
-                    dados_vendas.append({
-                        "tipo_registro": "Venda",
-                        "id_origem": v.pk,
-                        "produto_nome": v.produto.nome if v.produto else "N/A",
-                        "cliente_nome": v.cliente.nome if v.cliente else "Consumidor Final",
-                        "quantidade_vendida": v.quantidade,
-                        "valor_total_venda": float(v.valor_total),
-                        "data_transacao": v.data_venda.strftime('%Y-%m-%d'),
-                        "status_venda": v.get_status_display(),
-                        "forma_pagamento": v.get_forma_pagamento_display(),
-                        "condicao_prazo": v.get_condicao_prazo_display() if v.condicao_prazo else "À Vista",
-                        "valor_conta_receber": None,
-                        "status_conta_receber": None,
-                        "data_vencimento_receber": None,
-                        "data_recebimento": None,
-                        "fornecedor_nome": None,
-                        "valor_conta_pagar": None,
-                        "status_conta_pagar": None,
-                        "data_vencimento_pagar": None,
-                        "data_pagamento": None,
-                    })
-
-                dados_contas_receber = []
-                for cr in contas_receber_queryset:
-                    produto_nome_venda = cr.venda.produto.nome if cr.venda and cr.venda.produto else "N/A"
-                    cliente_nome_cr = cr.cliente.nome if cr.cliente else (cr.venda.cliente.nome if cr.venda and cr.venda.cliente else "Consumidor Final")
-
-                    dados_contas_receber.append({
-                        "tipo_registro": "ContaReceber",
-                        "id_origem": cr.pk,
-                        "produto_nome": produto_nome_venda,
-                        "cliente_nome": cliente_nome_cr,
-                        "quantidade_vendida": cr.venda.quantidade if cr.venda else None,
-                        "valor_total_venda": float(cr.venda.valor_total) if cr.venda and cr.venda.valor_total is not None else None, # Ajuste para Decimal
-                        "data_transacao": cr.venda.data_venda.strftime('%Y-%m-%d') if cr.venda else None,
-                        "status_venda": cr.venda.get_status_display() if cr.venda else None,
-                        "forma_pagamento": cr.venda.get_forma_pagamento_display() if cr.venda else None,
-                        "condicao_prazo": cr.venda.get_condicao_prazo_display() if cr.venda and cr.venda.condicao_prazo else "À Vista",
-                        "valor_conta_receber": float(cr.valor),
-                        "status_conta_receber": cr.get_status_display(),
-                        "data_vencimento_receber": cr.data_vencimento.strftime('%Y-%m-%d'),
-                        "data_recebimento": cr.data_recebimento.strftime('%Y-%m-%d') if cr.data_recebimento else None,
-                        "fornecedor_nome": None,
-                        "valor_conta_pagar": None,
-                        "status_conta_pagar": None,
-                        "data_vencimento_pagar": None,
-                        "data_pagamento": None,
-                    })
-
-                dados_contas_pagar = []
-                for cp in contas_pagar_queryset:
-                    fornecedor_nome_cp = cp.fornecedor.nome_empresa if cp.fornecedor else "N/A"
-
-                    dados_contas_pagar.append({
-                        "tipo_registro": "ContaPagar",
-                        "id_origem": cp.pk,
-                        "produto_nome": None,
-                        "cliente_nome": None,
-                        "quantidade_vendida": None,
-                        "valor_total_venda": None,
-                        "data_transacao": None,
-                        "status_venda": None,
-                        "forma_pagamento": None,
-                        "condicao_prazo": None,
-                        "valor_conta_receber": None,
-                        "status_conta_receber": None,
-                        "data_vencimento_receber": None,
-                        "data_recebimento": None,
-                        "fornecedor_nome": fornecedor_nome_cp,
-                        "valor_conta_pagar": float(cp.valor),
-                        "status_conta_pagar": cp.get_status_display(),
-                        "data_vencimento_pagar": cp.data_vencimento.strftime('%Y-%m-%d'),
-                        "data_pagamento": cp.data_pagamento.strftime('%Y-%m-%d') if cp.data_pagamento else None,
-                    })
-
-                df = pd.DataFrame(dados_vendas + dados_contas_receber + dados_contas_pagar)
-                print(f"DEBUG: DataFrame criado com {len(df)} linhas.") # Debug point 4
-
-                if df.empty:
-                    print("DEBUG: DataFrame vazio, retornando mensagem sem dados.") # Debug point 5
-                    return JsonResponse({'answer': 'Não há dados de vendas ou contas para analisar.'})
-
-                genai.configure(api_key=settings.GEMINI_API_KEY)
-                model = genai.GenerativeModel('gemini-2.0-flash')
-                print("DEBUG: Modelo Gemini configurado.") # Debug point 6
-
-                prompt_content = create_code_generation_prompt(question, df.columns.to_list())
-                print(f"DEBUG: Prompt gerado para Gemini: \n{prompt_content[:500]}...") # Debug point 7 (primeiros 500 chars)
-
-                response_content = model.generate_content(prompt_content)
-                print(f"DEBUG: Resposta bruta do Gemini: {response_content.text}") # Debug point 8
-
-                parts = response_content.text.strip().split('---RESPOSTA---')
-
-                if len(parts) != 2:
-                    error_message = f"Formato de resposta inesperado do modelo de IA. Resposta bruta: {response_content.text}"
-                    print(f"ERROR: {error_message}") # Debug point 9
-                    return JsonResponse({'error': error_message}, status=500)
-
-                generated_code = parts[0].strip().replace("```python", "").replace("```", "").strip()
-                response_template = parts[1].strip()
-
-                print(f"DEBUG: Código gerado pela IA: ```python\n{generated_code}\n```") # Debug point 10
-                print(f"DEBUG: Template de resposta da IA: '{response_template}'") # Debug point 11
-
-                execution_globals = {"pd": pd, "df": df}
-                execution_locals = {'result': None} # Inicialize 'result' para garantir que sempre exista
+            final_answer = "" 
+            
+            if intention_category == 3: 
+                print("DEBUG: Intenção: Conversa Geral. Respondendo diretamente.")
+                chat_for_general = genai.GenerativeModel('gemini-2.0-flash').start_chat(history=chat_history_gemini_format)
+                general_response = chat_for_general.send_message(f"Responda à pergunta do usuário: '{question}'. Seja conciso, amigável e direto. Não gere código Python ou planos de ação. Foco em responder a perguntas gerais, saudações ou pedidos de ajuda.")
+                final_answer = general_response.text.strip()
                 
-                calculated_result = "Valor não definido pelo código gerado." # Inicializa antes do try/except do exec
-
-                exec(generated_code, execution_globals, execution_locals)
-                calculated_result = execution_locals['result'] # Agora sabemos que 'result' existe
+            elif intention_category == 1: 
+                print("DEBUG: Intenção: Análise de Dados Simples. Gerando código e apenas o resultado.")
                 
-                print(f"DEBUG: Resultado do código executado: {calculated_result}") # Debug point 12
+                try:
+                    vendas_queryset = Venda.objects.select_related('produto', 'cliente')
+                    contas_receber_queryset = ContaReceber.objects.select_related('venda__produto', 'cliente', 'venda')
+                    contas_pagar_queryset = ContaPagar.objects.select_related('fornecedor')
 
-                formatted_result = str(calculated_result)
-                if isinstance(calculated_result, (int, float, Decimal)):
-                    # A condição foi ajustada para ser mais específica para valores monetários.
-                    # Removido 'total' da verificação aqui.
-                    if "R$" in response_template or "valor" in question.lower() or "receita" in question.lower() or "custo" in question.lower() or "montante" in question.lower():
-                        formatted_result = f"R$ {float(calculated_result):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    dados_vendas = []
+                    for v in vendas_queryset:
+                        dados_vendas.append({
+                            "tipo_registro": "Venda",
+                            "id_origem": v.pk,
+                            "produto_nome": v.produto.nome if v.produto else "N/A",
+                            "cliente_nome": v.cliente.nome if v.cliente else "Consumidor Final",
+                            "quantidade_vendida": v.quantidade,
+                            "valor_total_venda": float(v.valor_total),
+                            "data_transacao": v.data_venda.strftime('%Y-%m-%d'),
+                            "status_venda_code": v.status,
+                            "status_venda_display": v.get_status_display(),
+                            "forma_pagamento": v.get_forma_pagamento_display(),
+                            "condicao_prazo": v.get_condicao_prazo_display() if v.condicao_prazo else "À Vista",
+                            "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
+                            "fornecedor_nome": None, "valor_conta_pagar": None, "status_conta_pagar": None, "data_vencimento_pagar": None, "data_pagamento": None,
+                        })
+
+                    dados_contas_receber = []
+                    for cr in contas_receber_queryset:
+                        produto_nome_venda = cr.venda.produto.nome if cr.venda and cr.venda.produto else "N/A"
+                        cliente_nome_cr = cr.cliente.nome if cr.cliente else (cr.venda.cliente.nome if cr.venda and cr.venda.cliente else "Consumidor Final")
+
+                        dados_contas_receber.append({
+                            "tipo_registro": "ContaReceber", "id_origem": cr.pk,
+                            "produto_nome": produto_nome_venda, "cliente_nome": cliente_nome_cr,
+                            "quantidade_vendida_receber": cr.venda.quantidade if cr.venda else None,
+                            "valor_total_venda_receber": float(cr.venda.valor_total) if cr.venda and cr.venda.valor_total is not None else None,
+                            "data_transacao": cr.venda.data_venda.strftime('%Y-%m-%d') if cr.venda else None,
+                            "status_venda_code": v.status,
+                            "status_venda_display": v.get_status_display(),
+                            "forma_pagamento": cr.venda.get_forma_pagamento_display() if cr.venda else None,
+                            "condicao_prazo": cr.venda.get_condicao_prazo_display() if cr.venda and cr.venda.condicao_prazo else "À Vista",
+                            "valor_conta_receber": float(cr.valor), "status_conta_receber": cr.status,
+                            "data_vencimento_receber": cr.data_vencimento.strftime('%Y-%m-%d'),
+                            "data_recebimento": cr.data_recebimento.strftime('%Y-%m-%d') if cr.data_recebimento else None,
+                            "fornecedor_nome": None, "valor_conta_pagar": None, "status_conta_pagar": None, "data_vencimento_pagar": None, "data_pagamento": None,
+                        })
+
+                    dados_contas_pagar = []
+                    for cp in contas_pagar_queryset:
+                        fornecedor_nome_cp = cp.fornecedor.nome_empresa if cp.fornecedor else "N/A"
+
+                        dados_contas_pagar.append({
+                            "tipo_registro": "ContaPagar", "id_origem": cp.pk,
+                            "produto_nome": None, "cliente_nome": None, "quantidade_vendida": None, "valor_total_venda": None,
+                            "data_transacao": None, "status_venda": None, "forma_pagamento": None, "condicao_prazo": None,
+                            "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
+                            "fornecedor_nome": fornecedor_nome_cp,
+                            "valor_conta_pagar": float(cp.valor), "status_conta_pagar": cp.status,
+                            "status_conta_pagar_code": cp.status,
+                            "status_conta_pagar_display": cp.get_status_display(),
+                            "data_vencimento_pagar": cp.data_vencimento.strftime('%Y-%m-%d'),
+                            "data_pagamento": cp.data_pagamento.strftime('%Y-%m-%d') if cp.data_pagamento else None,
+                        })
+
+                    df = pd.DataFrame(dados_vendas + dados_contas_receber + dados_contas_pagar)
+                    print(f"DEBUG: DataFrame criado com {len(df)} linhas.")
+
+                    if df.empty:
+                        print("DEBUG: DataFrame vazio, retornando mensagem sem dados.")
+                        final_answer = 'Não há dados de vendas ou contas para analisar. Por favor, adicione alguns registros para que eu possa gerar insights.'
                     else:
-                        # Para contagens ou outros números não monetários, formata como número inteiro
-                        formatted_result = f"{int(calculated_result):,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                elif isinstance(calculated_result, dict):
-                    formatted_result = "\n" + "\n".join([f"- {k}: {v}" for k, v in calculated_result.items()])
-                elif calculated_result is None or (isinstance(calculated_result, pd.Series) and calculated_result.empty):
-                    formatted_result = "0" if ("R$" in response_template or "valor" in question.lower() or "custo" in question.lower() or "montante" in question.lower()) else "N/A"
-                
-                print(f"DEBUG: Resultado formatado: '{formatted_result}'") # Debug point 13
+                        simple_analysis_prompt = f"""
+                        Você é um assistente especialista em Python e Pandas. Quando receber uma pergunta, responda o usuário em linguagem natural e seja educado, interativo e conversacional.
+                        O usuário fez a seguinte pergunta: "{question}".
+                        Você tem acesso a um DataFrame pandas chamado `df` com as colunas: {df.columns.to_list()}.
+                        Gere APENAS o código Python que calcula o `result` para responder à pergunta. Responda o `result` de forma gentil e educada.
+                        Formato:
+                        Claro, aqui está a resposta: {{result}}
+                        Use o seguinte código como base:
+                        ```python
+                        # Seu código aqui, exemplo: result = df['valor_total_venda'].sum()
+                        ```
+                        """
+                        print(f"DEBUG: Prompt para Análise Simples: \n{simple_analysis_prompt[:500]}...")
+                        
+                        chat_for_simple_analysis = genai.GenerativeModel('gemini-2.0-flash').start_chat(history=chat_history_gemini_format)
+                        simple_response = chat_for_simple_analysis.send_message(simple_analysis_prompt)
+                        
+                        generated_code_simple = simple_response.text.strip().replace("```python", "").replace("```", "").strip()
+                        
+                        execution_globals = {"pd": pd, "df": df}
+                        execution_locals = {'result': None}
+                        calculated_result_simple = "Resultado não gerado."
 
-                final_answer = response_template.format(result=formatted_result)
-                print(f"DEBUG: Resposta final: '{final_answer}'") # Debug point 14
-                
-                return JsonResponse({'answer': final_answer})
+                        try:
+                            exec(generated_code_simple, execution_globals, execution_locals)
+                            calculated_result_simple = execution_locals.get('result', "Resultado não gerado pela IA") 
+                            print(f"DEBUG: Resultado do código executado (simples): {calculated_result_simple}")
+                        except Exception as e_exec:
+                            error_message_exec = f"Erro na execução do código (simples): {type(e_exec).__name__}: {e_exec}"
+                            print(f"ERROR: {error_message_exec}")
+                            calculated_result_simple = f"Desculpe, houve um erro ao calcular o resultado: {error_message_exec}"
+                        
+                        if isinstance(calculated_result_simple, (int, float, Decimal)):
+                            if "R$" in question or "valor" in question.lower() or "receita" in question.lower() or "custo" in question.lower() or "montante" in question.lower():
+                                final_answer = f"R$ {float(calculated_result_simple):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            else:
+                                final_answer = f"{int(calculated_result_simple):,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        elif isinstance(calculated_result_simple, dict):
+                            final_answer = "\n" + "\n".join([f"- {k}: {v}" for k, v in calculated_result_simple.items()])
+                        elif calculated_result_simple is None or (isinstance(calculated_result_simple, pd.Series) and calculated_result_simple.empty) or (isinstance(calculated_result_simple, str) and calculated_result_simple == "Resultado não gerado pela IA"):
+                            final_answer = "0" if ("R$" in question or "valor" in question.lower() or "custo" in question.lower() or "montante" in question.lower()) else "N/A"
+                        else:
+                            final_answer = str(calculated_result_simple) 
+                    
+                except Exception as e_df_or_gemini_call:
+                    error_message_df = f'Ocorreu um erro ao criar DataFrame ou chamar Gemini para análise simples: {type(e_df_or_gemini_call).__name__}: {e_df_or_gemini_call}'
+                    print(f"ERROR (e_df_or_gemini_call): {error_message_df}")
+                    final_answer = f"Desculpe, houve um erro interno ao processar sua solicitação de dados simples: {error_message_df}"
 
-            except Exception as e_main_logic:
-                # Este é o catch para qualquer erro dentro do bloco principal de lógica antes do JSON final
-                error_message_main = f'Ocorreu um erro inesperado na lógica principal do chatbot: {type(e_main_logic).__name__}: {e_main_logic}'
-                print(f"CRITICAL ERROR (e_main_logic): {error_message_main}") # Debug point 16
-                return JsonResponse({'error': error_message_main}, status=500)
-            # --- Fim do bloco principal de lógica ---
+            else:
+                print("DEBUG: Intenção: Análise Estratégica. Gerando código com diagnóstico e plano de ação.")
+                
+                try:
+                    vendas_queryset = Venda.objects.select_related('produto', 'cliente')
+                    contas_receber_queryset = ContaReceber.objects.select_related('venda__produto', 'cliente', 'venda')
+                    contas_pagar_queryset = ContaPagar.objects.select_related('fornecedor')
+
+                    dados_vendas = []
+                    for v in vendas_queryset:
+                        dados_vendas.append({
+                            "tipo_registro": "Venda", "id_origem": v.pk,
+                            "produto_nome": v.produto.nome if v.produto else "N/A", "cliente_nome": v.cliente.nome if v.cliente else "Consumidor Final",
+                            "quantidade_vendida": v.quantidade,
+                            "valor_total_venda": float(v.valor_total),
+                            "data_transacao": v.data_venda.strftime('%Y-%m-%d'),
+                            "status_venda": v.get_status_display(),
+                            "forma_pagamento": v.get_forma_pagamento_display(),
+                            "condicao_prazo": v.get_condicao_prazo_display() if v.condicao_prazo else "À Vista",
+                            "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
+                            "fornecedor_nome": None, "valor_conta_pagar": None, "status_conta_pagar": None, "data_vencimento_pagar": None, "data_pagamento": None,
+                        })
+
+                    dados_contas_receber = []
+                    for cr in contas_receber_queryset:
+                        produto_nome_venda = cr.venda.produto.nome if cr.venda and cr.venda.produto else "N/A"
+                        cliente_nome_cr = cr.cliente.nome if cr.cliente else (cr.venda.cliente.nome if cr.venda and cr.venda.cliente else "Consumidor Final")
+
+                        dados_contas_receber.append({
+                            "tipo_registro": "ContaReceber", "id_origem": cr.pk,
+                            "produto_nome": produto_nome_venda, "cliente_nome": cliente_nome_cr,
+                            "quantidade_vendida_receber": cr.venda.quantidade if cr.venda else None,
+                            "valor_total_venda_receber": float(cr.venda.valor_total) if cr.venda and cr.venda.valor_total is not None else None,
+                            "data_transacao": cr.venda.data_venda.strftime('%Y-%m-%d') if cr.venda else None,
+                            "status_venda": cr.venda.get_status_display() if cr.venda else None,
+                            "forma_pagamento": cr.venda.get_forma_pagamento_display() if cr.venda else None,
+                            "condicao_prazo": cr.venda.get_condicao_prazo_display() if cr.venda and cr.venda.condicao_prazo else "À Vista",
+                            "valor_conta_receber": float(cr.valor), "status_conta_receber": cr.status,
+                            "data_vencimento_receber": cr.data_vencimento.strftime('%Y-%m-%d'),
+                            "data_recebimento": cr.data_recebimento.strftime('%Y-%m-%d') if cr.data_recebimento else None,
+                            "fornecedor_nome": None, "valor_conta_pagar": None, "status_conta_pagar": None, "data_vencimento_pagar": None, "data_pagamento": None,
+                        })
+
+                    dados_contas_pagar = []
+                    for cp in contas_pagar_queryset:
+                        fornecedor_nome_cp = cp.fornecedor.nome_empresa if cp.fornecedor else "N/A"
+
+                        dados_contas_pagar.append({
+                            "tipo_registro": "ContaPagar", "id_origem": cp.pk,
+                            "produto_nome": None, "cliente_nome": None, "quantidade_vendida": None, "valor_total_venda": None,
+                            "data_transacao": None, "status_venda": None, "forma_pagamento": None, "condicao_prazo": None,
+                            "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
+                            "fornecedor_nome": fornecedor_nome_cp,
+                            "valor_conta_pagar": float(cp.valor), "status_conta_pagar": cp.status,
+                            "data_vencimento_pagar": cp.data_vencimento.strftime('%Y-%m-%d'),
+                            "data_pagamento": cp.data_pagamento.strftime('%Y-%m-%d') if cp.data_pagamento else None,
+                        })
+
+                    df = pd.DataFrame(dados_vendas + dados_contas_receber + dados_contas_pagar)
+                    print(f"DEBUG: DataFrame criado com {len(df)} linhas.")
+                    
+                    if df.empty:
+                        print("DEBUG: DataFrame vazio, retornando mensagem sem dados.")
+                        final_answer = 'Não há dados de vendas ou contas para analisar. Por favor, adicione alguns registros para que eu possa gerar insights.'
+                    else:
+                        prompt_content = create_code_generation_prompt(question, df.columns.to_list(), chat_history_for_prompt)
+                        
+                        print(f"DEBUG: Prompt final para Gemini (Análise de Dados Estratégica): \n{prompt_content[:1000]}...")
+
+                        response_content = chat_for_intention.send_message(prompt_content)
+                        print(f"DEBUG: Resposta bruta do Gemini: {response_content.text}")
+
+                        parts = response_content.text.strip().split('---RESPOSTA---')
+
+                        if len(parts) != 2:
+                            error_message = f"Formato de resposta inesperado do modelo de IA (Análise de Dados Estratégica). Resposta bruta: {response_content.text}"
+                            print(f"ERROR: {error_message}")
+                            final_answer = error_message
+                        else:
+                            generated_code = parts[0].strip().replace("```python", "").replace("```", "").strip()
+                            response_template = parts[1].strip()
+
+                            print(f"DEBUG: Código gerado pela IA: ```python\n{generated_code}\n```")
+                            print(f"DEBUG: Template de resposta da IA: '{response_template}'")
+
+                            execution_globals = {"pd": pd, "df": df}
+                            execution_locals = {'result': None}
+                            calculated_result = "Valor não definido pelo código gerado."
+
+                            try:
+                                exec(generated_code, execution_globals, execution_locals)
+                                calculated_result = execution_locals.get('result', "Resultado não gerado pela IA") 
+                                print(f"DEBUG: Resultado do código executado: {calculated_result}")
+                            except Exception as e_exec:
+                                error_message_exec = f"Erro na execução do código gerado pela IA: {type(e_exec).__name__}: {e_exec}"
+                                print(f"ERROR: {error_message_exec}")
+                                calculated_result = f"Desculpe, houve um erro ao processar sua solicitação: {error_message_exec}"
+                            
+                            formatted_result = str(calculated_result)
+                            
+                            if isinstance(calculated_result, (int, float, Decimal)):
+                                if "R$" in response_template or "valor" in question.lower() or "receita" in question.lower() or "custo" in question.lower() or "montante" in question.lower():
+                                    formatted_result = f"R$ {float(calculated_result):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                else:
+                                    formatted_result = f"{int(calculated_result):,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            elif isinstance(calculated_result, dict):
+                                formatted_result = "\n" + "\n".join([f"- {k}: {v}" for k, v in calculated_result.items()])
+                            elif calculated_result is None or (isinstance(calculated_result, pd.Series) and calculated_result.empty) or (isinstance(calculated_result, str) and calculated_result == "Resultado não gerado pela IA"):
+                                formatted_result = "0" if ("R$" in response_template or "valor" in question.lower() or "custo" in question.lower() or "montante" in question.lower()) else "N/A"
+                            else:
+                                formatted_result = str(calculated_result)
+                            
+                            print(f"DEBUG: Resultado formatado (Estratégico): '{formatted_result}'")
+
+                            final_answer = response_template 
+                            
+                            match_analysis_content = re.search(
+                                r"Aqui está a sua análise:\n(.*?)(?=\n+Diagnóstico:|\n+Plano de Ação:|$)", 
+                                response_template, 
+                                re.DOTALL
+                            )
+
+                            if match_analysis_content:
+                                llm_inserted_analysis_content = match_analysis_content.group(1).strip()
+                                print(f"DEBUG: Conteúdo da análise detectado pelo LLM no template para substituição (Estratégico): '{llm_inserted_analysis_content}'")
+                                final_answer = final_answer.replace(llm_inserted_analysis_content, formatted_result, 1)
+                            elif '{{result}}' in response_template:
+                                print("DEBUG: O {{result}} placeholder foi encontrado (Estratégico). Realizando substituição direta.")
+                                final_answer = final_answer.replace('{{result}}', formatted_result)
+                            else:
+                                print("DEBUG: Nenhum padrão de análise nem {{result}} encontrado (Estratégico). Usando template original do LLM.")
+                                final_answer = response_template 
+                                
+                        print(f"DEBUG: Resposta final formatada e substituída (Estratégica): '{final_answer}'")
+                
+                except Exception as e_df_or_gemini_call:
+                    error_message_df = f'Ocorreu um erro ao criar DataFrame ou chamar Gemini para análise estratégica: {type(e_df_or_gemini_call).__name__}: {e_df_or_gemini_call}'
+                    print(f"ERROR (e_df_or_gemini_call): {error_message_df}")
+                    final_answer = f"Desculpe, houve um erro interno ao processar sua solicitação estratégica: {error_message_df}"
+
+            ChatMessage.objects.create(session_id=session_id, role='user', content=question)
+            ChatMessage.objects.create(session_id=session_id, role='ai', content=final_answer)
+
+            return JsonResponse({'answer': final_answer})
 
         except json.JSONDecodeError as e_json:
             error_message_json = f'Erro ao decodificar JSON na requisição: {e_json}'
-            print(f"ERROR (e_json): {error_message_json}") # Debug point 17
+            print(f"ERROR (e_json): {error_message_json}")
             return JsonResponse({'error': error_message_json}, status=400)
         except Exception as e_outer:
-            # Este é o catch para erros muito iniciais (ex: request.body)
             error_message_outer = f'Ocorreu um erro no servidor antes do processamento da pergunta: {type(e_outer).__name__}: {e_outer}'
-            print(f"CRITICAL ERROR (e_outer): {error_message_outer}") # Debug point 18
+            print(f"CRITICAL ERROR (e_outer): {error_message_outer}")
             return JsonResponse({'error': error_message_outer}, status=500)
 
-    print("DEBUG: Método não permitido.") # Debug point 19
+    print("DEBUG: Método não permitido.")
     return JsonResponse({'error': 'Método não permitido.'}, status=405)
 
 
-def create_code_generation_prompt(question, columns):
-    column_list = ", ".join([f"'{col}'" for col in columns])
+def create_code_generation_prompt(question, available_columns, chat_history_for_prompt=None):
+
+    column_list = "\n".join([f"- {col}" for col in available_columns])
+
+    history_text = ""
+    if chat_history_for_prompt:
+        for msg in chat_history_for_prompt:
+            if msg['role'] == 'user':
+                history_text += f"Usuário: {msg['parts'][0]['text']}\n"
+            elif msg['role'] == 'ai':
+                analysis_match = re.search(r"Aqui está a sua análise:\n(.*?)(?=\n+Diagnóstico:|\n+Plano de Ação:|$)", msg['parts'][0]['text'], re.DOTALL)
+                
+                if analysis_match:
+                    history_text += f"Assistente (Análise): {analysis_match.group(1).strip()}\n"
+                else:
+                    first_line_of_ai_response = msg['parts'][0]['text'].split('\n')[0]
+                    history_text += f"Assistente: {first_line_of_ai_response}\n" # first line input
+            
+        history_text = "Histórico da conversa:\n" + history_text + "\n"
+
     prompt = f"""
-    Você é um assistente de programação analítica que converte perguntas em código Python Pandas e, em seguida, gera uma frase de resposta amigável que incorpora o resultado.
-    
-    O DataFrame disponível se chama `df` e possui as seguintes colunas: [{column_list}].
-    Este DataFrame pode conter três tipos de registros, identificados pela coluna 'tipo_registro': 'Venda', 'ContaReceber' ou 'ContaPagar'.
-    
-    **Colunas e Suas Definições Cruciais:**
-    - 'tipo_registro': Indica se a linha é uma 'Venda', 'ContaReceber' ou 'ContaPagar'. Use para filtrar.
-    - 'produto_nome': Nome do produto (para 'Venda' e 'ContaReceber' associada a venda).
-    - 'cliente_nome': Nome do cliente (para 'Venda' e 'ContaReceber').
-    - 'fornecedor_nome': Nome do fornecedor (para 'ContaPagar').
-    - 'quantidade_vendida': Quantidade de itens em uma transação de 'Venda'.
-    - 'valor_total_venda': Valor total monetário de uma 'Venda' (Receita Faturada).
-    - 'status_venda': Status da 'Venda' ('Pendente', 'Concluída').
-    - 'forma_pagamento': Forma de pagamento da 'Venda' ('À Vista', 'A Prazo').
-    - 'condicao_prazo': Condição de prazo da 'Venda' ('7 Dias', '14 Dias', '28 Dias', 'À Vista').
-    - 'valor_conta_receber': Valor monetário de uma 'ContaReceber'.
-    - 'status_conta_receber': Status da 'ContaReceber' ('ABERTO', 'RECEBIDO', 'ATRASADO', 'CANCELADO'). 
-    - 'data_transacao': Data da 'Venda' (YYYY-MM-DD).
-    - 'data_vencimento_receber': Data de vencimento da 'ContaReceber' (YYYY-MM-DD).
-    - 'data_recebimento': Data em que a 'ContaReceber' foi recebida (YYYY-MM-DD ou None).
-    - 'valor_conta_pagar': Valor monetário de uma 'ContaPagar'.
-    - 'status_conta_pagar': Status da 'ContaPagar' ('ABERTO', 'PAGO', 'ATRASADO', 'CANCELADO'). 
-    - 'data_vencimento_pagar': Data de vencimento da 'ContaPagar' (YYYY-MM-DD).
-    - 'data_pagamento': Data em que a 'ContaPagar' foi paga (YYYY-MM-DD ou None).
+    Você é um consultor financeiro e estratégico experiente, com acesso completo aos dados de vendas e contas de uma empresa no formato de um DataFrame pandas chamado `df`.
+    Seu objetivo é ajudar o gestor a tomar decisões informadas e proativas, indo além de simples cálculos para fornecer insights acionáveis e planos de ação.
 
-    **Instruções Cruciais para o CÓDIGO:**
-    - O código deve ser UMA ÚNICA LINHA Python.
-    - O resultado do cálculo deve ser armazenado na variável `result`.
-    - Use `df` como seu DataFrame.
-    - NÃO inclua imports (ex: `import pandas`).
-    - Converta colunas de data (ex: 'data_transacao', 'data_recebimento', 'data_vencimento_receber', 'data_pagamento', 'data_vencimento_pagar') para datetime usando `pd.to_datetime()` se precisar de operações de data ou filtragem por período. Lembre-se de lidar com valores `None` ou `NaT` após a conversão, usando `.dropna()` ou verificações `notna()`.
-    - Para contar itens, use `len()`. Para somar valores, use `.sum()`.
-    
-    **Instruções Cruciais para a RESPOSTA:**
-    - A resposta deve ser uma frase amigável e direta.
-    - **IMPERATIVO: Use o placeholder EXATAMENTE `{{result}}` (minúsculo) onde o valor calculado será inserido.**
-    - Após o código, adicione a string `---RESPOSTA---` e, em seguida, a sua frase de resposta.
+    O DataFrame `df` consolidado contém as seguintes colunas disponíveis:
+    {column_list}
 
-    **Exemplos:**
+    Detalhes das colunas importantes:
+    - 'tipo_registro': Indica o tipo de registro ('Venda', 'ContaReceber', 'ContaPagar').
+    - 'status_venda_code': Código interno do status da venda (e.g., 'P', 'C').
+    - 'status_venda_display': Representação legível do status da venda (e.g., 'PENDENTE', 'CONCLUIDO').
+    - 'status_conta_receber_code': Código interno do status da conta a receber (e.g., 'ABERTO', 'RECEBIDO', 'ATRASADO').
+    - 'status_conta_receber_display': Representação legível do status da conta a receber (e.g., 'Aberto', 'Recebido', 'Atrasado').
+    - 'status_conta_pagar_code': Código interno do status da conta a pagar (e.g., 'ABERTO', 'PAGO', 'ATRASADO').
+    - 'status_conta_pagar_display': Representação legível do status da conta a pagar (e.g., 'Aberto', 'Pago', 'Atrasado').
+    - 'valor_conta_receber': Valor monetário da conta a receber.
+    - 'valor_conta_pagar': Valor monetário da conta a pagar.
+    - 'valor_total_venda': Valor total da venda.
+    - 'valor_total_venda_receber': Valor total da venda a receber.
+    - 'quantidade_vendida': Quantidade de itens vendidos na venda.
+    - 'quantidade_vendida_receber': Quantidade de itens vendidos na venda associada à conta a receber.
+    - 'data_transacao': Data da venda ou data base para o registro.
+    - 'data_recebimento': Data em que a conta a receber foi efetivamente recebida.
+    - 'data_pagamento': Data em que a conta a pagar foi efetivamente paga.
+    - 'cliente_nome': Nome do cliente.
+    - 'produto_nome': Nome do produto.
+    - 'fornecedor_nome': Nome do fornecedor.
 
-    Pergunta: "Qual a receita recebida total?"
-    Código: result = df[(df['tipo_registro'] == 'ContaReceber') & (df['status_conta_receber'] == 'RECEBIDO')]['valor_conta_receber'].sum()
-    ---RESPOSTA---A receita total que já foi recebida é de {{result}}.
+    {history_text}
+    O usuário fez a seguinte pergunta: {question}
 
-    Pergunta: "Quantas vendas a prazo foram feitas?"
-    Código: result = len(df[(df['tipo_registro'] == 'Venda') & (df['forma_pagamento'] == 'AP')])
-    ---RESPOSTA---Foram realizadas {{result}} vendas a prazo.
+    Com base nesta pergunta e no histórico (se houver), você deve:
+    1. Gerar um fragmento de código Python (usando pandas) para analisar o `df` e obter o `result` solicitado. O código deve ser conciso e focar em gerar um único resultado final (número, string, dicionário, lista). **O `result` deve ser o dado puro, sem formatação de texto explicativo.**
+    2. Elaborar um texto de resposta que não apenas apresente o resultado (onde `{{result}}` será substituído pelo valor calculado), mas também:
+        - Um breve diagnóstico ou contextualização do resultado.
+        - Sugestões de 'Plano de Ação' concreto e acionável para o gestor.
+        - Possíveis impactos ou próximas etapas para essas ações.
+        - Não suponha, use somente as colunas como base para o diagnóstico e plano de ação.
+        - Use somente os nomes reais das colunas do DataFrame para referenciar os dados.
 
-    Pergunta: "Qual o valor das contas a receber que estão em aberto?"
-    Código: result = df[(df['tipo_registro'] == 'ContaReceber') & df['status_conta_receber'].isin(['ABERTO', 'ATRASADO'])]['valor_conta_receber'].sum()
-    ---RESPOSTA---O valor total das contas a receber em aberto é de {{result}}.
+    **IMPORTANTE:**
+    - Se a pergunta não puder ser respondida com os dados disponíveis ou exigir mais detalhes, o `result` deve ser uma string explicando isso.
+    - O formato `{{result}}` é um placeholder. Não o substitua com o valor real; seu código Python fará isso.
 
-    Pergunta: "Quais os 3 produtos mais vendidos?"
-    Código: result = df[df['tipo_registro'] == 'Venda'].groupby('produto_nome')['quantidade_vendida'].sum().nlargest(3).to_dict()
-    ---RESPOSTA---Os 3 produtos mais vendidos foram: {{result}}.
+    Formato da sua resposta:
+    ```python
+    # Seu código Python aqui. Exemplo: result = df['valor_total_venda'].sum()
+    ```
+    ---RESPOSTA---
+    Aqui está a sua análise:
+    {{result}}
 
-    Pergunta: "Quantas vendas concluídas?"
-    Código: result = len(df[(df['tipo_registro'] == 'Venda') & (df['status_venda'] == 'CONCLUIDA')])
-    ---RESPOSTA---O número de vendas concluídas é de {{result}}.
+    Diagnóstico: [Seu diagnóstico baseado no resultado. Foco em fatos e implicações diretas. Se o `result` for uma string explicativa, baseie o diagnóstico nela.]
 
-    Pergunta: "Qual o valor das vendas feitas à vista?"
-    Código: result = df[(df['tipo_registro'] == 'Venda') & (df['forma_pagamento'] == 'AV')]['valor_total_venda'].sum()
-    ---RESPOSTA---O valor total das vendas feitas à vista foi de {{result}}.
+    Plano de Ação:
+    1. **Ação 1:** [Descrição da ação] - *Justificativa e Impacto. Se a análise não for possível, sugira ações para obter mais dados ou refinar a pergunta.*
+    2. **Ação 2:** [Descrição da ação] - *Justificativa e Impacto.*
+    [Adicione mais ações conforme necessário]
 
-    Pergunta: "Qual o total de contas a pagar em aberto?"
-    Código: result = df[(df['tipo_registro'] == 'ContaPagar') & df['status_conta_pagar'].isin(['ABERTO', 'ATRASADO'])]['valor_conta_pagar'].sum()
-    ---RESPOSTA---O total de contas a pagar em aberto é de {{result}}.
-
-    Pergunta: "Qual o número de clientes cadastrados?"
-    Código: result = len(df[df['tipo_registro'] == 'Venda']['cliente_nome'].unique())
-    ---RESPOSTA---Existem {{result}} clientes únicos registrados através das vendas.
-
-    **Pergunta do Usuário:**
-    {question}
-
-    **Seu Código (apenas uma linha), seguido por ---RESPOSTA--- e a frase:**
+    Procurando por mais insights? Pergunte-me sobre...
     """
     return prompt

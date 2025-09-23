@@ -1,4 +1,3 @@
-# core/forms.py
 from django import forms
 from .models import Produto, Cliente, Venda, ContaReceber, ContaPagar, Categoria, Fornecedor
 

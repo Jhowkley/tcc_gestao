@@ -104,7 +104,7 @@
         font-weight: bold;
     }
 
-    /* Estilos para o Assistente de Análise */
+   /* chatbot */
     #chat-widget-container {
         position: fixed;
         bottom: 20px;
@@ -143,7 +143,7 @@
         overflow: hidden;
     }
     .chat-header {
-        background-color: var(--primary-color);
+        background-color: #1f2937;
         color: white;
         padding: 10px 15px;
         display: flex;
@@ -151,7 +151,7 @@
         align-items: center;
         font-size: 1.1em;
     }
-    .chat-header .close-btn {
+    .chat-header .close-btn { /* Use a classe para estilo, ID para JS */
         background: none;
         border: none;
         color: white;
@@ -183,7 +183,7 @@
         color: #333;
         align-self: flex-start;
     }
-    .chat-input {
+    .chat-input { /* Agora esta classe é do FORM */
         display: flex;
         padding: 10px 15px;
         border-top: 1px solid #eee;
@@ -197,7 +197,7 @@
         font-size: 0.9em;
     }
     .chat-input button {
-        background-color: var(--primary-color);
+        background-color: #1f2937;
         color: white;
         border: none;
         border-radius: 20px;
@@ -207,7 +207,7 @@
         font-size: 0.9em;
     }
     .chat-input button:hover {
-        background-color: #4338ca;
+        background-color: #0068faff;
     }
 </style>
 
@@ -219,7 +219,7 @@
     </div>
     <div class="kpi-card green">
         <i class="fa-solid fa-hand-holding-dollar icon"></i>
-        <h3>Receita Recebida</h3> {# Alterado para Receita Recebida #}
+        <h3>Receita Recebida</h3>
         <p>R$ {{ receita_recebida|floatformat:2 }}</p>
     </div>
     <div class="kpi-card orange">
@@ -232,7 +232,7 @@
         <h3>Vendas Concluídas</h3>
         <p>{{ vendas_concluidas_count }}</p>
     </div>
-    <div class="kpi-card red"> {# NOVO KPI: Contas a Receber em Aberto #}
+    <div class="kpi-card red">
         <i class="fa-solid fa-receipt icon"></i>
         <h3>Contas a Receber (Aberto)</h3>
         <p>R$ {{ contas_receber_em_aberto_valor|floatformat:2 }}</p>
@@ -241,7 +241,7 @@
 
 <div class="dashboard-charts-products">
     <div class="chart-card">
-        <h2>Receita Recebida por Mês</h2> {# Título do gráfico atualizado #}
+        <h2>Receita Recebida por Mês</h2>
         <canvas id="revenueChart"></canvas>
     </div>
 
@@ -260,95 +260,215 @@
     </div>
 </div>
 
+<div id="chat-widget-container">
+    <button id="chat-button">
+        <i class="fa-solid fa-robot"></i> </button> 
+
+    <div id="chat-window">
+        <div class="chat-header">
+            <span class="chat-title">Assistente de Análise</span>
+            <button id="close-chat-btn" class="close-btn">X</button> 
+        </div>
+        <div class="chat-messages">
+            </div>
+        
+        <form class="chat-input" id="chat-form"> 
+            <input type="text" id="chat-input" placeholder="Digite sua mensagem...">
+            <button type="submit" id="send-chat-btn">Enviar</button>
+        </form>
+    </div>
+</div>
+
+{#chart#}
 <script type="application/json" id="chart-data">
     {{ chart_data_json|safe }}
 </script>
 
+{# Import UUID #}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // --- CHATBOT SCRIPT ---
-        const chatButton = document.getElementById('chat-button');
-        const chatWindow = document.getElementById('chat-window');
-        const closeChatBtn = document.getElementById('close-chat-btn');
-        const chatMessages = document.getElementById('chat-messages');
-        const chatInput = document.getElementById('chat-input');
-        const sendChatBtn = document.getElementById('send-chat-btn');
-
-        chatButton.addEventListener('click', function() {
-            chatWindow.style.display = chatWindow.style.display === 'flex' ? 'none' : 'flex';
-            if (chatWindow.style.display === 'flex') {
-                chatInput.focus();
-            }
-        });
-
-        closeChatBtn.addEventListener('click', function() {
-            chatWindow.style.display = 'none';
-        });
-
-        function addMessage(text, sender) {
-            const msgDiv = document.createElement('div');
-            msgDiv.classList.add('chat-message', sender);
-            msgDiv.textContent = text;
-            chatMessages.appendChild(msgDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight; // Auto scroll to bottom
-        }
-
-        sendChatBtn.addEventListener('click', sendMessage);
-        chatInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
-        });
-
-        addMessage("Olá. Como posso ajudar?", "ai"); // Initial AI message
-
-        function sendMessage() {
-            const question = chatInput.value.trim();
-            if (question) {
-                addMessage(question, 'user');
-                chatInput.value = '';
-                
-                fetch('/api/ask/', { // Ensure this URL is correct
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCookie('csrftoken') // Function to get CSRF token
-                    },
-                    body: JSON.stringify({ question: question })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    addMessage(data.answer || data.error, 'ai');
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    addMessage('Desculpe, houve um erro ao processar sua pergunta.', 'ai');
-                });
-            }
-        }
-
-        // Function to get CSRF token for Django AJAX requests
-        function getCookie(name) {
-            let cookieValue = null;
-            if (document.cookie && document.cookie !== '') {
-                const cookies = document.cookie.split(';');
-                for (let i = 0; i < cookies.length; i++) {
-                    const cookie = cookies[i].trim();
-                    if (cookie.startsWith(name + '=')) {
-                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                        break;
-                    }
+    // Function CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.startsWith(name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
                 }
             }
-            return cookieValue;
+        }
+        return cookieValue;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log("DEBUG FRONTEND: DOMContentLoaded disparado. Iniciando script principal.");
+
+        let sessionId = localStorage.getItem('chatbotSessionId');
+        if (!sessionId || sessionId.trim() === '' || sessionId === 'null' || sessionId === 'undefined') {
+            if (typeof uuid !== 'undefined' && typeof uuid.v4 === 'function') {
+                sessionId = uuid.v4(); 
+                localStorage.setItem('chatbotSessionId', sessionId);
+                console.log("DEBUG FRONTEND: Novo Session ID gerado/forçado:", sessionId);
+            } else {
+                console.error("ERROR FRONTEND: uuid.v4() não está disponível! Gerando ID de sessão fallback.");
+                sessionId = 'fallback-' + Math.random().toString(36).substring(2, 15);
+                localStorage.setItem('chatbotSessionId', sessionId);
+            }
+        } else {
+            console.log("DEBUG FRONTEND: Usando Session ID existente:", sessionId);
         }
 
-        // --- CHART.JS SCRIPT ---
-        const ctx = document.getElementById('revenueChart').getContext('2d');
-        console.log(ctx);
+        const chatButton = document.getElementById('chat-button');
+        const chatWindow = document.getElementById('chat-window');
+        const closeChatBtn = document.getElementById('close-chat-btn'); 
+        const chatMessages = document.querySelector('#chat-window .chat-messages');
+        const chatInput = document.getElementById('chat-input');
+        const sendChatBtn = document.getElementById('send-chat-btn');
+        const chatForm = document.getElementById('chat-form');
+
+        console.log("DEBUG FRONTEND: Elemento chatButton:", chatButton ? "OK" : "NULL");
+        console.log("DEBUG FRONTEND: Elemento chatWindow:", chatWindow ? "OK" : "NULL");
+        console.log("DEBUG FRONTEND: Elemento closeChatBtn:", closeChatBtn ? "OK" : "NULL");
+        console.log("DEBUG FRONTEND: Elemento chatMessages:", chatMessages ? "OK" : "NULL");
+        console.log("DEBUG FRONTEND: Elemento chatInput:", chatInput ? "OK" : "NULL");
+        console.log("DEBUG FRONTEND: Elemento sendChatBtn:", sendChatBtn ? "OK" : "NULL");
+        console.log("DEBUG FRONTEND: Elemento chatForm (deve ser um form):", chatForm ? "OK" : "NULL");
+
+        function addMessage(text, senderClass) {
+            if (!chatMessages) { 
+                console.error("Chat messages container not found within addMessage!");
+                return null;
+            }
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('chat-message', senderClass);
+            msgDiv.innerHTML = text.replace(/\n/g, '<br>');
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return msgDiv;
+        }
+
+        function loadChatHistory() {
+            addMessage("Olá! Como posso ajudar?", "ai");
+            console.log("DEBUG FRONTEND: Mensagem inicial do chat carregada.");
+        }
+
+        function sendMessage() {
+    console.log("DEBUG FRONTEND: sendMessage() foi chamada.");
+    const question = chatInput.value.trim();
+    if (question) {
+        addMessage(question, 'user');
+        chatInput.value = ''; 
+        
+        let typingIndicatorDiv = null; 
+        
+        const tempIndicator = addMessage('Digitando...', 'ai'); 
+        if (tempIndicator) {
+            tempIndicator.classList.add('typing-indicator'); 
+            typingIndicatorDiv = tempIndicator; 
+        }
+
+        const payloadToSend = { 
+            question: question,
+            session_id: sessionId 
+        };
+        
+        console.log("DEBUG FRONTEND: Payload ANTES de STRINGIFY:", payloadToSend);
+        const jsonBody = JSON.stringify(payloadToSend);
+        console.log("DEBUG FRONTEND: JSON stringificado FINAL para BODY:", jsonBody);
+
+        fetch('/api/ask/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: jsonBody 
+        })
+        .then(response => {
+            console.log("DEBUG FRONTEND: Resposta bruta do servidor:", response);
+            if (typingIndicatorDiv && typingIndicatorDiv.parentNode) {
+                typingIndicatorDiv.remove();
+            }
+
+            if (!response.ok) {
+                return response.json().then(errorData => {
+                    throw new Error(errorData.error || 'Erro desconhecido do servidor');
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (typingIndicatorDiv && typingIndicatorDiv.parentNode) {
+                typingIndicatorDiv.remove();
+            }
+            addMessage(data.answer || data.error || 'Não foi possível obter uma resposta do agente.', 'ai');
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            if (typingIndicatorDiv && typingIndicatorDiv.parentNode) {
+                typingIndicatorDiv.remove();
+            }
+            addMessage('Desculpe, houve um erro ao processar sua pergunta: ' + error.message, 'ai');
+        });
+    } else {
+        console.log("DEBUG FRONTEND: Pergunta vazia, sendMessage não enviada.");
+    }
+}
+
+
+
+if (chatButton && chatWindow && closeChatBtn && chatMessages && chatInput && chatForm && sendChatBtn) {
+            
+            chatButton.addEventListener('click', function() {
+                chatWindow.style.display = 'flex';
+                chatInput.focus();
+                console.log("DEBUG FRONTEND: Botão de chat clicado. Janela aberta.");
+            });
+
+            closeChatBtn.addEventListener('click', function() {
+                chatWindow.style.display = 'none';
+                console.log("DEBUG FRONTEND: Botão de fechar chat clicado. Janela fechada.");
+            });
+            
+            loadChatHistory(); 
+
+            sendChatBtn.addEventListener('click', function(event) {
+                console.log("DEBUG FRONTEND: Listener de CLICK do sendChatBtn disparado!");
+                event.preventDefault(); 
+                console.log("DEBUG FRONTEND: event.preventDefault() chamado para o BOTÃO DE ENVIAR.");
+                sendMessage();
+            });
+
+            chatInput.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter') {
+                    console.log("DEBUG FRONTEND: Tecla Enter pressionada no input.");
+                    event.preventDefault(); 
+                    sendMessage();
+                }
+            });
+
+            console.log("DEBUG FRONTEND: Todos os listeners do chatbot (modificados) foram anexados.");
+
+        } else {
+            console.error("ERROR FRONTEND: Um ou mais elementos essenciais do chatbot NÃO FORAM ENCONTRADOS. Verifique IDs/classes HTML ou a ordem de carregamento.");
+            console.log("Status de elementos na verificação final:");
+            console.log("  chatButton:", chatButton ? "OK" : "NULL");
+            console.log("  chatWindow:", chatWindow ? "OK" : "NULL");
+            console.log("  closeChatBtn:", closeChatBtn ? "OK" : "NULL");
+            console.log("  chatMessages:", chatMessages ? "OK" : "NULL");
+            console.log("  chatInput:", chatInput ? "OK" : "NULL");
+            console.log("  sendChatBtn:", sendChatBtn ? "OK" : "NULL");
+            console.log("  chatForm:", chatForm ? "OK" : "NULL");
+        }
+        
+        //  Script Chart.js ---
+        const ctx = document.getElementById('revenueChart')?.getContext('2d');
         const chartDataElement = document.getElementById('chart-data');
-        console.log(chartDataElement.textContent);
         
         let chartData = { labels: [], data: [] };
         if (chartDataElement) {
@@ -359,58 +479,59 @@
                 }
             } catch (e) {
                 console.error("Erro ao fazer parse do JSON do gráfico:", e);
-                console.error("JSON recebido:", jsonText);
-            }
-            
             }
         }
 
-        const revenueChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: chartData.labels,
-                datasets: [{
-                    label: 'Receita Recebida (R$)',
-                    data: chartData.data,
-                    backgroundColor: 'rgba(79, 70, 229, 0.2)',
-                    borderColor: 'rgba(79, 70, 229, 1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Valor (R$)'
-                        }
-                    },
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Mês/Ano'
-                        }
-                    }
+        if (ctx) {
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{
+                        label: 'Receita Recebida (R$)',
+                        data: chartData.data,
+                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                        borderColor: 'rgba(79, 70, 229, 1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
                 },
-                plugins: {
-                    legend: {
-                        display: false // Não exibir a legenda do dataset
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Valor (R$)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Mês/Ano'
+                            }
+                        }
                     },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                return `R$ ${context.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `R$ ${context.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                                }
                             }
                         }
                     }
                 }
-            }
-        });
+            });
+        } else {
+            console.error("Não foi possível obter o contexto 2D do canvas para o Chart.js.");
+        }
     });
 </script>
 {% endblock %}

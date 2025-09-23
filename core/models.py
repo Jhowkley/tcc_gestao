@@ -1,4 +1,3 @@
-# core/models.py
 from django.db import models
 from django.utils import timezone
 from django.urls import reverse
@@ -19,7 +18,7 @@ class Fornecedor(models.Model):
         return self.nome_empresa
 
     def get_absolute_url(self):
-        return reverse('fornecedor_editar', kwargs={'pk': self.pk}) # ALTERADO AQUI
+        return reverse('fornecedor_editar', kwargs={'pk': self.pk}) 
 
 class Cliente(models.Model):
     nome = models.CharField(max_length=255)
@@ -37,7 +36,7 @@ class Cliente(models.Model):
         return self.nome
     
     def get_absolute_url(self):
-        return reverse('cliente_editar', kwargs={'pk': self.pk}) # ALTERADO AQUI
+        return reverse('cliente_editar', kwargs={'pk': self.pk}) 
 
 class Categoria(models.Model):
     nome = models.CharField(max_length=100, unique=True)
@@ -52,7 +51,7 @@ class Categoria(models.Model):
         return self.nome
     
     def get_absolute_url(self):
-        return reverse('categoria_editar', kwargs={'pk': self.pk}) # ALTERADO AQUI
+        return reverse('categoria_editar', kwargs={'pk': self.pk}) 
 
 class Produto(models.Model):
     nome = models.CharField(max_length=200)
@@ -73,7 +72,7 @@ class Produto(models.Model):
         return self.nome
     
     def get_absolute_url(self):
-        return reverse('produto_editar', kwargs={'pk': self.pk}) # ALTERADO AQUI
+        return reverse('produto_editar', kwargs={'pk': self.pk})
 
 class Venda(models.Model):
     STATUS_CHOICES = [
@@ -116,7 +115,7 @@ class Venda(models.Model):
         ordering = ['-data_venda']
         
     def get_absolute_url(self):
-        return reverse('venda_editar', kwargs={'pk': self.pk}) # ALTERADO AQUI
+        return reverse('venda_editar', kwargs={'pk': self.pk}) 
 
 class ContaPagar(models.Model):
     fornecedor = models.ForeignKey(Fornecedor, on_delete=models.SET_NULL, null=True, blank=True, related_name='contas_pagar_fornecedor')
@@ -143,7 +142,7 @@ class ContaPagar(models.Model):
         ordering = ['data_vencimento']
     
     def get_absolute_url(self):
-        return reverse('conta_pagar_editar', kwargs={'pk': self.pk}) # ALTERADO AQUI
+        return reverse('conta_pagar_editar', kwargs={'pk': self.pk})
         
 class ContaReceber(models.Model):
     venda = models.OneToOneField(Venda, on_delete=models.CASCADE, related_name='conta_receber_venda', null=True, blank=True)
@@ -171,4 +170,17 @@ class ContaReceber(models.Model):
         ordering = ['data_vencimento']
     
     def get_absolute_url(self):
-        return reverse('conta_receber_editar', kwargs={'pk': self.pk}) # ALTERADO AQUI
+        return reverse('conta_receber_editar', kwargs={'pk': self.pk})
+    
+class ChatMessage(models.Model):
+    session_id = models.CharField(max_length=255, db_index=True)
+    role = models.CharField(max_length=10)  # 'user' ou 'assistant'
+    content = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.session_id} - {self.role}: {self.content[:50]}"
+    
+    class Meta:
+        ordering = ['timestamp']
+    

@@ -20,7 +20,7 @@
             margin: 0; 
             background-color: var(--content-bg);
             height: 100vh;
-            overflow: hidden;
+            overflow: hidden; /* Controla o overflow do corpo principal, o conteúdo rola dentro de main-content */
         }
         .app-wrapper { 
             display: flex; 
@@ -37,6 +37,7 @@
             flex-shrink: 0;
             height: 100%;
             transition: margin-left 0.3s ease-in-out;
+            overflow-y: auto; /* Permite rolagem se muitos itens */
         }
         #sidebar.collapsed { margin-left: -250px; }
         .sidebar-header { padding: 20px; font-size: 24px; font-weight: bold; text-align: center; }
@@ -63,7 +64,7 @@
             padding: 15px 30px;
             background-color: #fff;
             border-bottom: 1px solid var(--border-color);
-            flex-shrink: 0;
+            flex-shrink: 0; /* Impede que o header encolha */
         }
         #sidebar-toggle { background: none; border: none; font-size: 24px; cursor: pointer; }
         .header-title { font-size: 28px; font-weight: bold; margin-left: 20px; }
@@ -72,144 +73,111 @@
         .user-info span { display: block; }
         .user-info .email { font-size: 12px; color: #6b7280; }
 
-        .main-content { flex-grow: 1; padding: 30px; overflow-y: auto; }
+        .main-content { flex-grow: 1; padding: 30px; overflow-y: auto; /* Conteúdo rola aqui */ }
 
-        /* --- Chatbot Estilo Restaurado --- */
-        #chat-toggle-button {
-            position: fixed; right: 20px; bottom: 20px;
-            width: 60px; height: 60px;
-            background-color: var(--primary-color);
-            color: white; border: none; border-radius: 50%;
-            font-size: 28px; cursor: pointer; z-index: 1000;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-            display: flex; justify-content: center; align-items: center;
-        }
-        #chatbot-container-wrapper {
-            position: fixed; bottom: 90px; right: 20px;
-            width: 350px; height: 450px;
-            background-color: #fff; border-radius: 12px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
-            display: flex; flex-direction: column;
-            overflow: hidden; z-index: 1000;
-            transform-origin: bottom right;
-            transition: transform 0.3s ease-in-out, opacity 0.3s;
-        }
-        #chatbot-container-wrapper.hidden { transform: scale(0); opacity: 0; }
-        #chatbot-header {
-            background-color: #1f2937; color: white;
-            padding: 10px 15px; display: flex;
-            justify-content: space-between; align-items: center;
-            font-size: 16px; font-weight: bold;
-        }
-        #chatbot-header button { background: none; border: none; color: white; font-size: 20px; cursor: pointer; }
-        #chat-messages { display: flex; flex-direction: column; flex-grow: 1; padding: 15px; overflow-y: auto; }
-        #chat-form { display: flex; padding: 15px; border-top: 1px solid var(--border-color); }
-        #chat-input { flex-grow: 1; border: 1px solid #ccc; border-radius: 20px; padding: 10px 15px; font-size: 14px; margin-right: 10px; }
-        #chat-submit { background-color: var(--primary-color); color: white; border: none; border-radius: 20px; padding: 10px 20px; font-size: 14px; cursor: pointer; }
-        
-        .message { margin-bottom: 12px; padding: 8px 12px; border-radius: 18px; max-width: 90%; word-wrap: break-word; font-size: 14px; line-height: 1.4; }
-        .user-message { background-color: #e0f2fe; color: #212529; align-self: flex-end; margin-left: auto; border-bottom-right-radius: 2px; }
-        .bot-message { background-color: #f1f1f1; color: #212529; align-self: flex-start; border-bottom-left-radius: 2px; }
-
-        #typing-indicator { align-items: center; }
-        #typing-indicator .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #8e8e8e; margin: 0 2px; animation: typing-bubble 1.4s infinite ease-in-out both; }
-        #typing-indicator .dot:nth-child(1) { animation-delay: -0.32s; }
-        #typing-indicator .dot:nth-child(2) { animation-delay: -0.16s; }
-        @keyframes typing-bubble { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
-        
+        /* --- Estilos Gerais para Cards e Tabelas (úteis para todos os templates) --- */
         .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-}
-.page-header h1 {
-    margin: 0;
-    font-size: 28px;
-}
-.btn {
-    display: inline-block;
-    padding: 10px 20px;
-    background-color: var(--primary-color);
-    color: white;
-    text-decoration: none;
-    border-radius: 8px;
-    font-weight: 500;
-    transition: background-color 0.2s;
-}
-.btn:hover {
-    background-color: #4338ca; /* Um tom mais escuro de roxo */
-}
-.btn-success {
-    background-color: #16a34a; /* Verde */
-}
-.btn-success:hover {
-    background-color: #15803d;
-}
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .page-header h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        .btn:hover {
+            background-color: #4338ca; /* Um tom mais escuro de roxo */
+        }
+        .btn-success {
+            background-color: #16a34a; /* Verde */
+        }
+        .btn-success:hover {
+            background-color: #15803d;
+        }
 
-.content-card {
-    background-color: #fff;
-    border-radius: 12px;
-    padding: 25px;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
+        .content-card {
+            background-color: #fff;
+            border-radius: 12px;
+            padding: 25px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
 
-.styled-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
-}
-.styled-table thead th {
-    text-align: left;
-    padding: 12px 15px;
-    background-color: #f9fafb; /* Cinza bem claro */
-    color: #6b7280; /* Cinza escuro */
-    font-weight: 600;
-    border-bottom: 2px solid var(--border-color);
-}
-.styled-table tbody td {
-    padding: 15px;
-    border-bottom: 1px solid var(--border-color);
-}
-.styled-table tbody tr:last-child td {
-    border-bottom: none;
-}
-.styled-table tbody tr:hover {
-    background-color: #f9fafb;
-}
-.styled-table .actions a {
-    color: var(--primary-color);
-    text-decoration: none;
-    font-weight: 500;
-}
-.styled-table .actions a:hover {
-    text-decoration: underline;
-}
-.status-pendente, .status-aberto {
-    background-color: #fcd34d; /* Amarelo */
-    color: #92400e;
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-size: 0.85em;
-    font-weight: 500;
-}
-.status-pago, .status-recebido {
-    background-color: #a7f3d0; /* Verde */
-    color: #065f46;
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-size: 0.85em;
-    font-weight: 500;
-}
-.status-atrasado {
-    background-color: #fecaca; /* Vermelho */
-    color: #991b1b;
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-size: 0.85em;
-    font-weight: 500;
-}
+        .styled-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        .styled-table thead th {
+            text-align: left;
+            padding: 12px 15px;
+            background-color: #f9fafb; /* Cinza bem claro */
+            color: #6b7280; /* Cinza escuro */
+            font-weight: 600;
+            border-bottom: 2px solid var(--border-color);
+        }
+        .styled-table tbody td {
+            padding: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .styled-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        .styled-table tbody tr:hover {
+            background-color: #f9fafb;
+        }
+        .styled-table .actions a {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .styled-table .actions a:hover {
+            text-decoration: underline;
+        }
+        .status-pendente, .status-aberto {
+            background-color: #fcd34d; /* Amarelo */
+            color: #92400e;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+        .status-pago, .status-recebido {
+            background-color: #a7f3d0; /* Verde */
+            color: #065f46;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+        .status-atrasado {
+            background-color: #fecaca; /* Vermelho */
+            color: #991b1b;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+        /* --- ESTILOS DO CHATBOT REMOVIDOS DE BASE.HTML - DEIXEI ALGUNS PARA EXEMPLO/COMPATIBILIDADE --- */
+        /* #chat-toggle-button, #chatbot-container-wrapper, #chatbot-header, #chat-messages,
+           #chat-form, #chat-input, #chat-submit, .message, .user-message, .bot-message,
+           #typing-indicator, #typing-indicator .dot { display: none; } /* ou remova completamente se não for necessário */
+        /* Se precisar que o CSS global do chatbot exista para quando ele for carregado em outros templates,
+           você pode manter os estilos CSS do chatbot aqui e apenas remover o HTML e o JS.
+           Removi os estilos do chatbot do base.html para garantir que não haja referências,
+           mas se quiser que o CSS seja global, pode reinserir os blocos de estilo específicos do chatbot aqui.
+           No entanto, para o dashboard.html funcionar, seus estilos de chatbot devem estar LÁ. */
     </style>
 </head>
 <body>
@@ -222,7 +190,7 @@
                 <a href="{% url 'lista_clientes' %}"><i class="fa-solid fa-users"></i> Clientes</a>
                 <a href="{% url 'lista_produtos' %}"><i class="fa-solid fa-box-archive"></i> Produtos</a>
                 <a href="{% url 'lista_fornecedores' %}"><i class="fa-solid fa-truck-fast"></i> Fornecedores</a>
-                 <a href="{% url 'lista_contas_pagar' %}"><i class="fa-solid fa-file-invoice-dollar"></i> Contas a Pagar</a>
+                <a href="{% url 'lista_contas_pagar' %}"><i class="fa-solid fa-file-invoice-dollar"></i> Contas a Pagar</a>
                 <a href="{% url 'lista_contas_receber' %}"><i class="fa-solid fa-hand-holding-dollar"></i> Contas a Receber</a>
                 <a href="#"><i class="fa-solid fa-chart-line"></i> Análise Financeira</a>
             </div>
@@ -267,97 +235,18 @@
         </div>
     </div>
 
-    <button id="chat-toggle-button"><i class="fa-solid fa-robot"></i></button>
-    <div id="chatbot-container-wrapper" class="hidden">
-        <div id="chatbot-header">
-            <span>Assistente de Análise</span>
-            <div class="header-buttons">
-                <button id="clear-chat-button" title="Limpar Chat">🗑️</button>
-            </div>
-        </div>
-        <div id="chat-messages">
-            <div class="message bot-message">Olá! Como posso ajudar?</div>
-            <div id="typing-indicator" class="message bot-message" style="display: none;"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
-        </div>
-        <form id="chat-form">
-            <input type="text" id="chat-input" placeholder="Digite sua mensagem..." autocomplete="off">
-            <button type="submit" id="chat-submit">Enviar</button>
-        </form>
-    </div>
-
     <script>
-        // Lógica da Sidebar
+        // Script para o toggle da sidebar
         const sidebar = document.getElementById('sidebar');
         const sidebarToggle = document.getElementById('sidebar-toggle');
         sidebarToggle.addEventListener('click', () => {
             sidebar.classList.toggle('collapsed');
         });
 
-        // Lógica do Chatbot
-        const chatToggleButton = document.getElementById('chat-toggle-button');
-        const chatbotContainer = document.getElementById('chatbot-container-wrapper');
-        const chatMessages = document.getElementById('chat-messages');
-        const chatForm = document.getElementById('chat-form');
-        const chatInput = document.getElementById('chat-input');
-        const clearChatButton = document.getElementById('clear-chat-button');
-        const typingIndicator = document.getElementById('typing-indicator');
+        // REMOVIDO: TODO O CÓDIGO JavaScript DO CHATBOT QUE ESTAVA AQUI
 
-        chatToggleButton.addEventListener('click', () => {
-            chatbotContainer.classList.toggle('hidden');
-        });
-
-        chatForm.addEventListener('submit', function(event) {
-            event.preventDefault();
-            const userMessage = chatInput.value;
-            if (userMessage.trim() === '') return;
-            appendMessage(userMessage, 'user-message');
-            chatInput.value = '';
-            typingIndicator.style.display = 'flex';
-            scrollToBottom();
-
-            fetch("{% url 'ask_api' %}", {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-                body: JSON.stringify({ question: userMessage })
-            })
-            .then(response => response.json())
-            .then(data => {
-                const botAnswer = data.answer || data.error || 'Não foi possível obter uma resposta.';
-                appendMessage(botAnswer, 'bot-message');
-            })
-            .catch(error => {
-                console.error('Erro:', error);
-                appendMessage('Houve um erro de comunicação com o servidor.', 'bot-message');
-            })
-            .finally(() => {
-                typingIndicator.style.display = 'none';
-                scrollToBottom();
-            });
-        });
-
-        function appendMessage(message, className) {
-            const messageDiv = document.createElement('div');
-            messageDiv.classList.add('message', className);
-            messageDiv.textContent = message;
-            chatMessages.insertBefore(messageDiv, typingIndicator);
-            scrollToBottom();
-        }
-
-        function scrollToBottom() {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-
-        clearChatButton.addEventListener('click', function() {
-            chatMessages.innerHTML = `
-                <div class="message bot-message">Olá! Como posso ajudar?</div>
-                <div id="typing-indicator" class="message bot-message" style="display: none;">
-                    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-                </div>
-            `;
-        });
-
-        // Lógica de navegação ativa (versão corrigida e final)
-document.addEventListener('DOMContentLoaded', function() {
+        // Script para ativar o link de navegação atual
+        document.addEventListener('DOMContentLoaded', function() {
             const currentPath = window.location.pathname;
             const navLinks = document.querySelectorAll('.sidebar-nav a');
 
@@ -365,13 +254,11 @@ document.addEventListener('DOMContentLoaded', function() {
             let longestMatchLength = 0;
 
             navLinks.forEach(link => {
-                //  getAttribute para pegar o valor literal do href, evitando problemas com placeholders
                 const linkHref = link.getAttribute('href');
                 if (linkHref === '#') {
                     return; 
                 }
 
-                // Normalizamos o link para ter a mesma estrutura do pathname
                 const linkPath = new URL(link.href).pathname;
 
                 if (currentPath.startsWith(linkPath)) {
@@ -382,7 +269,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            // Limpa todos os links antes de aplicar a classe ao melhor candidato
             navLinks.forEach(link => link.classList.remove('active'));
             
             if (bestMatch) {

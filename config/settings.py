@@ -11,6 +11,15 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+if os.environ.get("GEMINI_API_KEY"):
+    print("DEBUG: GEMINI_API_KEY carregada com sucesso!")
+else:
+    print("DEBUG: GEMINI_API_KEY NÃO foi carregada!")
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -124,7 +133,5 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CHAVE DA API GEMINI
-GEMINI_API_KEY = ""
 
 CORS_ALLOW_ALL_ORIGINS = True

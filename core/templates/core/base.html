@@ -20,14 +20,14 @@
             margin: 0; 
             background-color: var(--content-bg);
             height: 100vh;
-            overflow: hidden; /* Controla o overflow do corpo principal, o conteúdo rola dentro de main-content */
+            overflow: hidden; /* overflow main-content */
         }
         .app-wrapper { 
             display: flex; 
             height: 100%; 
         }
 
-        /* --- Sidebar (Navegação) --- */
+        /* --- Sidebar (Navigation) --- */
         #sidebar {
             width: 250px;
             background-color: var(--sidebar-bg);
@@ -169,15 +169,9 @@
             font-size: 0.85em;
             font-weight: 500;
         }
-        /* --- ESTILOS DO CHATBOT REMOVIDOS DE BASE.HTML - DEIXEI ALGUNS PARA EXEMPLO/COMPATIBILIDADE --- */
         /* #chat-toggle-button, #chatbot-container-wrapper, #chatbot-header, #chat-messages,
            #chat-form, #chat-input, #chat-submit, .message, .user-message, .bot-message,
            #typing-indicator, #typing-indicator .dot { display: none; } /* ou remova completamente se não for necessário */
-        /* Se precisar que o CSS global do chatbot exista para quando ele for carregado em outros templates,
-           você pode manter os estilos CSS do chatbot aqui e apenas remover o HTML e o JS.
-           Removi os estilos do chatbot do base.html para garantir que não haja referências,
-           mas se quiser que o CSS seja global, pode reinserir os blocos de estilo específicos do chatbot aqui.
-           No entanto, para o dashboard.html funcionar, seus estilos de chatbot devem estar LÁ. */
     </style>
 </head>
 <body>
@@ -236,16 +230,14 @@
     </div>
 
     <script>
-        // Script para o toggle da sidebar
+        // Script toggle sidebar
         const sidebar = document.getElementById('sidebar');
         const sidebarToggle = document.getElementById('sidebar-toggle');
         sidebarToggle.addEventListener('click', () => {
             sidebar.classList.toggle('collapsed');
         });
 
-        // REMOVIDO: TODO O CÓDIGO JavaScript DO CHATBOT QUE ESTAVA AQUI
-
-        // Script para ativar o link de navegação atual
+        // Script link for navigation
         document.addEventListener('DOMContentLoaded', function() {
             const currentPath = window.location.pathname;
             const navLinks = document.querySelectorAll('.sidebar-nav a');

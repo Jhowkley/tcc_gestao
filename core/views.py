@@ -1,4 +1,6 @@
 import json
+import os
+import dotenv
 import re 
 import pandas as pd
 import google.generativeai as genai
@@ -14,7 +16,7 @@ from .models import Produto, Cliente, Venda, ContaReceber, ContaPagar, Categoria
 from datetime import date, timedelta
 from decimal import Decimal
 from string import Template
-from .prompts import create_intention_prompt
+from django.http import JsonResponse
 import logging
 
 logger = logging.getLogger(__name__)
@@ -455,418 +457,242 @@ def marcar_conta_pagar_paga(request, pk):
     return JsonResponse({'status': 'error', 'message': 'Método não permitido.'}, status=405)
 
 
+print(f"DEBUG VIEWS.PY: os.environ.get('GEMINI_API_KEY') -> {os.environ.get('GEMINI_API_KEY')}")
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+
+model = genai.GenerativeModel('gemini-2.0-flash')
+
 @csrf_exempt
 def ask_api_view(request):
     if request.method == 'POST':
         try:
-            raw_body = request.body.decode('utf-8')
-            logger.info(f"Raw Request Body: {raw_body}")
             data = json.loads(request.body)
-            question = data.get('question')
-            session_id = data.get('session_id')
-            logger.info(f"Parsed Question: '{question}', Parsed Session ID: '{session_id}'")
-            print(f"DEBUG: Pergunta recebida: '{question}' para sessão: '{session_id}'")
+            question = data.get('question', '').strip()
+            session_id = data.get('session_id') 
 
-            if not question or not session_id:
-                print("ERROR: Nenhuma pergunta ou session_id fornecido.")
-                return JsonResponse({'error': 'Nenhuma pergunta ou ID de sessão fornecido.'}, status=400)
+            if not question:
+                return JsonResponse({'answer': 'Por favor, faça uma pergunta.'}, status=400)
+            
+            df = get_dataframe_from_db() 
 
-            db_history = ChatMessage.objects.filter(session_id=session_id).order_by('timestamp')
-            chat_history_gemini_format = []
-            chat_history_for_prompt = []
+            df_for_gemini_str = ""
+            if not df.empty:
+                relevant_cols = [
+                    'tipo_registro', 'id_origem', 'produto_nome', 'cliente_nome',
+                    'quantidade_vendida', 'valor_total_venda', 'data_transacao', 'status_venda_code',
+                    'valor_conta_receber', 'status_conta_receber', 'data_vencimento_receber', 'data_recebimento'
+                ]
+                df_relevant = df[relevant_cols].head(50)
+                
+                for col in ['data_transacao', 'data_vencimento_receber', 'data_recebimento']:
+                    if col in df_relevant.columns:
+                        df_relevant[col] = df_relevant[col].dt.strftime('%Y-%m-%d %H:%M:%S').fillna('N/A')
 
-            for msg in db_history:
-                gemini_role = 'user' if msg.role == 'user' else 'model'
-                chat_history_gemini_format.append({'role': gemini_role, 'parts': [{'text': msg.content}]})
-                chat_history_for_prompt.append({'role': msg.role, 'parts': [{'text': msg.content}]})
-            
-            print(f"DEBUG: Histórico de chat recuperado ({len(db_history)} mensagens).")
+                df_for_gemini_str = df_relevant.to_json(orient="records", date_format="iso")
+                print(f"DEBUG: DataFrame para Gemini (primeiras 50 linhas): {df_for_gemini_str[:500]}...")
 
-            genai.configure(api_key=settings.GEMINI_API_KEY)
+            agent_prompt = create_unified_agent_prompt(question, df_for_gemini_str)
+            print(f"DEBUG: Prompt Único para Gemini: \n{agent_prompt[:2000]}...")
+
             
-            intention_prompt_content = create_intention_prompt(question, chat_history_for_prompt)
-            print(f"DEBUG: Prompt de intenção para Gemini: \n{intention_prompt_content[:500]}...")
+            chat = model.start_chat(history=[]) 
             
-            chat_for_intention = genai.GenerativeModel('gemini-2.0-flash').start_chat(history=chat_history_gemini_format)
-            intention_response = chat_for_intention.send_message(intention_prompt_content)
+            # Configurações do LLM (Temperatura, top_p, top_k)
+            # A temperatura controla a aleatoriedade. 0.0 é determinístico, 1.0 é mais criativo.
+            # Para relatórios financeiros, queremos algo mais determinístico (0.0 a 0.5)
+            # top_p e top_k controlam a diversidade das palavras.
+            response = chat.send_message(
+                agent_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.2, 
+                    max_output_tokens=1000,
+                )
+            )
             
+            gemini_raw_response = response.text
+            print(f"DEBUG: Resposta bruta do Gemini (Único Prompt): {gemini_raw_response[:1000]}...")
+
             try:
-                intention_category_str = re.search(r'\d', intention_response.text.strip())
-                if intention_category_str:
-                    intention_category = int(intention_category_str.group(0))
-                else:
-                    raise ValueError("Nenhum número de categoria encontrado na resposta.")
-            except ValueError:
-                print(f"WARNING: Não foi possível classificar a intenção, resposta bruta: '{intention_response.text}'. Assumindo análise de dados aprofundada (categoria 2).")
-                intention_category = 2 
-
-            print(f"DEBUG: Intenção detectada: {intention_category}")
-
-            final_answer = "" 
-            
-            if intention_category == 3: 
-                print("DEBUG: Intenção: Conversa Geral. Respondendo diretamente.")
-                chat_for_general = genai.GenerativeModel('gemini-2.0-flash').start_chat(history=chat_history_gemini_format)
-                general_response = chat_for_general.send_message(f"Responda à pergunta do usuário: '{question}'. Seja conciso, amigável e direto. Não gere código Python ou planos de ação. Foco em responder a perguntas gerais, saudações ou pedidos de ajuda.")
-                final_answer = general_response.text.strip()
-                
-            elif intention_category == 1: 
-                print("DEBUG: Intenção: Análise de Dados Simples. Gerando código e apenas o resultado.")
-                
-                try:
-                    vendas_queryset = Venda.objects.select_related('produto', 'cliente')
-                    contas_receber_queryset = ContaReceber.objects.select_related('venda__produto', 'cliente', 'venda')
-                    contas_pagar_queryset = ContaPagar.objects.select_related('fornecedor')
-
-                    dados_vendas = []
-                    for v in vendas_queryset:
-                        dados_vendas.append({
-                            "tipo_registro": "Venda",
-                            "id_origem": v.pk,
-                            "produto_nome": v.produto.nome if v.produto else "N/A",
-                            "cliente_nome": v.cliente.nome if v.cliente else "Consumidor Final",
-                            "quantidade_vendida": v.quantidade,
-                            "valor_total_venda": float(v.valor_total),
-                            "data_transacao": v.data_venda.strftime('%Y-%m-%d'),
-                            "status_venda_code": v.status,
-                            "status_venda_display": v.get_status_display(),
-                            "forma_pagamento": v.get_forma_pagamento_display(),
-                            "condicao_prazo": v.get_condicao_prazo_display() if v.condicao_prazo else "À Vista",
-                            "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
-                            "fornecedor_nome": None, "valor_conta_pagar": None, "status_conta_pagar": None, "data_vencimento_pagar": None, "data_pagamento": None,
-                        })
-
-                    dados_contas_receber = []
-                    for cr in contas_receber_queryset:
-                        produto_nome_venda = cr.venda.produto.nome if cr.venda and cr.venda.produto else "N/A"
-                        cliente_nome_cr = cr.cliente.nome if cr.cliente else (cr.venda.cliente.nome if cr.venda and cr.venda.cliente else "Consumidor Final")
-
-                        dados_contas_receber.append({
-                            "tipo_registro": "ContaReceber", "id_origem": cr.pk,
-                            "produto_nome": produto_nome_venda, "cliente_nome": cliente_nome_cr,
-                            "quantidade_vendida_receber": cr.venda.quantidade if cr.venda else None,
-                            "valor_total_venda_receber": float(cr.venda.valor_total) if cr.venda and cr.venda.valor_total is not None else None,
-                            "data_transacao": cr.venda.data_venda.strftime('%Y-%m-%d') if cr.venda else None,
-                            "status_venda_code": v.status,
-                            "status_venda_display": v.get_status_display(),
-                            "forma_pagamento": cr.venda.get_forma_pagamento_display() if cr.venda else None,
-                            "condicao_prazo": cr.venda.get_condicao_prazo_display() if cr.venda and cr.venda.condicao_prazo else "À Vista",
-                            "valor_conta_receber": float(cr.valor), "status_conta_receber": cr.status,
-                            "data_vencimento_receber": cr.data_vencimento.strftime('%Y-%m-%d'),
-                            "data_recebimento": cr.data_recebimento.strftime('%Y-%m-%d') if cr.data_recebimento else None,
-                            "fornecedor_nome": None, "valor_conta_pagar": None, "status_conta_pagar": None, "data_vencimento_pagar": None, "data_pagamento": None,
-                        })
-
-                    dados_contas_pagar = []
-                    for cp in contas_pagar_queryset:
-                        fornecedor_nome_cp = cp.fornecedor.nome_empresa if cp.fornecedor else "N/A"
-
-                        dados_contas_pagar.append({
-                            "tipo_registro": "ContaPagar", "id_origem": cp.pk,
-                            "produto_nome": None, "cliente_nome": None, "quantidade_vendida": None, "valor_total_venda": None,
-                            "data_transacao": None, "status_venda": None, "forma_pagamento": None, "condicao_prazo": None,
-                            "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
-                            "fornecedor_nome": fornecedor_nome_cp,
-                            "valor_conta_pagar": float(cp.valor), "status_conta_pagar": cp.status,
-                            "status_conta_pagar_code": cp.status,
-                            "status_conta_pagar_display": cp.get_status_display(),
-                            "data_vencimento_pagar": cp.data_vencimento.strftime('%Y-%m-%d'),
-                            "data_pagamento": cp.data_pagamento.strftime('%Y-%m-%d') if cp.data_pagamento else None,
-                        })
-
-                    df = pd.DataFrame(dados_vendas + dados_contas_receber + dados_contas_pagar)
-                    print(f"DEBUG: DataFrame criado com {len(df)} linhas.")
-
-                    if df.empty:
-                        print("DEBUG: DataFrame vazio, retornando mensagem sem dados.")
-                        final_answer = 'Não há dados de vendas ou contas para analisar. Por favor, adicione alguns registros para que eu possa gerar insights.'
-                    else:
-                        simple_analysis_prompt = f"""
-                        Você é um assistente especialista em Python e Pandas. Quando receber uma pergunta, responda o usuário em linguagem natural e seja educado, interativo e conversacional.
-                        O usuário fez a seguinte pergunta: "{question}".
-                        Você tem acesso a um DataFrame pandas chamado `df` com as colunas: {df.columns.to_list()}.
-                        Gere APENAS o código Python que calcula o `result` para responder à pergunta. Responda o `result` de forma gentil e educada.
-                        Formato:
-                        Claro, aqui está a resposta: {{result}}
-                        Use o seguinte código como base:
-                        ```python
-                        # Seu código aqui, exemplo: result = df['valor_total_venda'].sum()
-                        ```
-                        """
-                        print(f"DEBUG: Prompt para Análise Simples: \n{simple_analysis_prompt[:500]}...")
-                        
-                        chat_for_simple_analysis = genai.GenerativeModel('gemini-2.0-flash').start_chat(history=chat_history_gemini_format)
-                        simple_response = chat_for_simple_analysis.send_message(simple_analysis_prompt)
-                        
-                        generated_code_simple = simple_response.text.strip().replace("```python", "").replace("```", "").strip()
-                        
-                        execution_globals = {"pd": pd, "df": df}
-                        execution_locals = {'result': None}
-                        calculated_result_simple = "Resultado não gerado."
-
-                        try:
-                            exec(generated_code_simple, execution_globals, execution_locals)
-                            calculated_result_simple = execution_locals.get('result', "Resultado não gerado pela IA") 
-                            print(f"DEBUG: Resultado do código executado (simples): {calculated_result_simple}")
-                        except Exception as e_exec:
-                            error_message_exec = f"Erro na execução do código (simples): {type(e_exec).__name__}: {e_exec}"
-                            print(f"ERROR: {error_message_exec}")
-                            calculated_result_simple = f"Desculpe, houve um erro ao calcular o resultado: {error_message_exec}"
-                        
-                        if isinstance(calculated_result_simple, (int, float, Decimal)):
-                            if "R$" in question or "valor" in question.lower() or "receita" in question.lower() or "custo" in question.lower() or "montante" in question.lower():
-                                final_answer = f"R$ {float(calculated_result_simple):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            else:
-                                final_answer = f"{int(calculated_result_simple):,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                        elif isinstance(calculated_result_simple, dict):
-                            final_answer = "\n" + "\n".join([f"- {k}: {v}" for k, v in calculated_result_simple.items()])
-                        elif calculated_result_simple is None or (isinstance(calculated_result_simple, pd.Series) and calculated_result_simple.empty) or (isinstance(calculated_result_simple, str) and calculated_result_simple == "Resultado não gerado pela IA"):
-                            final_answer = "0" if ("R$" in question or "valor" in question.lower() or "custo" in question.lower() or "montante" in question.lower()) else "N/A"
-                        else:
-                            final_answer = str(calculated_result_simple) 
+                cleaned_response = gemini_raw_response.strip()
+                if cleaned_response.startswith('```json'):
+                    cleaned_response = cleaned_response[len('```json'):]
                     
-                except Exception as e_df_or_gemini_call:
-                    error_message_df = f'Ocorreu um erro ao criar DataFrame ou chamar Gemini para análise simples: {type(e_df_or_gemini_call).__name__}: {e_df_or_gemini_call}'
-                    print(f"ERROR (e_df_or_gemini_call): {error_message_df}")
-                    final_answer = f"Desculpe, houve um erro interno ao processar sua solicitação de dados simples: {error_message_df}"
-
-            else:
-                print("DEBUG: Intenção: Análise Estratégica. Gerando código com diagnóstico e plano de ação.")
+                if cleaned_response.endswith('```'):
+                    cleaned_response = cleaned_response[:-len('```')]
+                cleaned_response = cleaned_response.strip() 
                 
-                try:
-                    vendas_queryset = Venda.objects.select_related('produto', 'cliente')
-                    contas_receber_queryset = ContaReceber.objects.select_related('venda__produto', 'cliente', 'venda')
-                    contas_pagar_queryset = ContaPagar.objects.select_related('fornecedor')
+                if not cleaned_response:
+                    raise ValueError("Resposta do Gemini limpa resultou em string vazia.")
 
-                    dados_vendas = []
-                    for v in vendas_queryset:
-                        dados_vendas.append({
-                            "tipo_registro": "Venda", "id_origem": v.pk,
-                            "produto_nome": v.produto.nome if v.produto else "N/A", "cliente_nome": v.cliente.nome if v.cliente else "Consumidor Final",
-                            "quantidade_vendida": v.quantidade,
-                            "valor_total_venda": float(v.valor_total),
-                            "data_transacao": v.data_venda.strftime('%Y-%m-%d'),
-                            "status_venda": v.get_status_display(),
-                            "forma_pagamento": v.get_forma_pagamento_display(),
-                            "condicao_prazo": v.get_condicao_prazo_display() if v.condicao_prazo else "À Vista",
-                            "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
-                            "fornecedor_nome": None, "valor_conta_pagar": None, "status_conta_pagar": None, "data_vencimento_pagar": None, "data_pagamento": None,
-                        })
+                print(f"DEBUG: Resposta limpa para JSON.loads: {cleaned_response[:1000]}...")
+                parsed_response = json.loads(cleaned_response)
+                final_answer_text = parsed_response.get('resposta_final', 'Não foi possível gerar uma resposta.')
+                diagnostico_text = parsed_response.get('diagnostico', '').strip()
+                plano_de_acao_text = parsed_response.get('plano_de_acao', '').strip()
+                dados_analisados_json = parsed_response.get('dados_analisados', {})
 
-                    dados_contas_receber = []
-                    for cr in contas_receber_queryset:
-                        produto_nome_venda = cr.venda.produto.nome if cr.venda and cr.venda.produto else "N/A"
-                        cliente_nome_cr = cr.cliente.nome if cr.cliente else (cr.venda.cliente.nome if cr.venda and cr.venda.cliente else "Consumidor Final")
 
-                        dados_contas_receber.append({
-                            "tipo_registro": "ContaReceber", "id_origem": cr.pk,
-                            "produto_nome": produto_nome_venda, "cliente_nome": cliente_nome_cr,
-                            "quantidade_vendida_receber": cr.venda.quantidade if cr.venda else None,
-                            "valor_total_venda_receber": float(cr.venda.valor_total) if cr.venda and cr.venda.valor_total is not None else None,
-                            "data_transacao": cr.venda.data_venda.strftime('%Y-%m-%d') if cr.venda else None,
-                            "status_venda": cr.venda.get_status_display() if cr.venda else None,
-                            "forma_pagamento": cr.venda.get_forma_pagamento_display() if cr.venda else None,
-                            "condicao_prazo": cr.venda.get_condicao_prazo_display() if cr.venda and cr.venda.condicao_prazo else "À Vista",
-                            "valor_conta_receber": float(cr.valor), "status_conta_receber": cr.status,
-                            "data_vencimento_receber": cr.data_vencimento.strftime('%Y-%m-%d'),
-                            "data_recebimento": cr.data_recebimento.strftime('%Y-%m-%d') if cr.data_recebimento else None,
-                            "fornecedor_nome": None, "valor_conta_pagar": None, "status_conta_pagar": None, "data_vencimento_pagar": None, "data_pagamento": None,
-                        })
-
-                    dados_contas_pagar = []
-                    for cp in contas_pagar_queryset:
-                        fornecedor_nome_cp = cp.fornecedor.nome_empresa if cp.fornecedor else "N/A"
-
-                        dados_contas_pagar.append({
-                            "tipo_registro": "ContaPagar", "id_origem": cp.pk,
-                            "produto_nome": None, "cliente_nome": None, "quantidade_vendida": None, "valor_total_venda": None,
-                            "data_transacao": None, "status_venda": None, "forma_pagamento": None, "condicao_prazo": None,
-                            "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
-                            "fornecedor_nome": fornecedor_nome_cp,
-                            "valor_conta_pagar": float(cp.valor), "status_conta_pagar": cp.status,
-                            "data_vencimento_pagar": cp.data_vencimento.strftime('%Y-%m-%d'),
-                            "data_pagamento": cp.data_pagamento.strftime('%Y-%m-%d') if cp.data_pagamento else None,
-                        })
-
-                    df = pd.DataFrame(dados_vendas + dados_contas_receber + dados_contas_pagar)
-                    print(f"DEBUG: DataFrame criado com {len(df)} linhas.")
+                full_response_for_user = final_answer_text
+                if diagnostico_text and diagnostico_text.lower() not in ['Não aplicável', 'não aplicavel', 'n/a', 'na']:
+                    full_response_for_user += f"\n\nDiagnóstico:\n{diagnostico_text}"
                     
-                    if df.empty:
-                        print("DEBUG: DataFrame vazio, retornando mensagem sem dados.")
-                        final_answer = 'Não há dados de vendas ou contas para analisar. Por favor, adicione alguns registros para que eu possa gerar insights.'
-                    else:
-                        prompt_content = create_code_generation_prompt(question, df.columns.to_list(), chat_history_for_prompt)
-                        
-                        print(f"DEBUG: Prompt final para Gemini (Análise de Dados Estratégica): \n{prompt_content[:1000]}...")
-
-                        response_content = chat_for_intention.send_message(prompt_content)
-                        print(f"DEBUG: Resposta bruta do Gemini: {response_content.text}")
-
-                        parts = response_content.text.strip().split('---RESPOSTA---')
-
-                        if len(parts) != 2:
-                            error_message = f"Formato de resposta inesperado do modelo de IA (Análise de Dados Estratégica). Resposta bruta: {response_content.text}"
-                            print(f"ERROR: {error_message}")
-                            final_answer = error_message
-                        else:
-                            generated_code = parts[0].strip().replace("```python", "").replace("```", "").strip()
-                            response_template = parts[1].strip()
-
-                            print(f"DEBUG: Código gerado pela IA: ```python\n{generated_code}\n```")
-                            print(f"DEBUG: Template de resposta da IA: '{response_template}'")
-
-                            execution_globals = {"pd": pd, "df": df}
-                            execution_locals = {'result': None}
-                            calculated_result = "Valor não definido pelo código gerado."
-
-                            try:
-                                exec(generated_code, execution_globals, execution_locals)
-                                calculated_result = execution_locals.get('result', "Resultado não gerado pela IA") 
-                                print(f"DEBUG: Resultado do código executado: {calculated_result}")
-                            except Exception as e_exec:
-                                error_message_exec = f"Erro na execução do código gerado pela IA: {type(e_exec).__name__}: {e_exec}"
-                                print(f"ERROR: {error_message_exec}")
-                                calculated_result = f"Desculpe, houve um erro ao processar sua solicitação: {error_message_exec}"
-                            
-                            formatted_result = str(calculated_result)
-                            
-                            if isinstance(calculated_result, (int, float, Decimal)):
-                                if "R$" in response_template or "valor" in question.lower() or "receita" in question.lower() or "custo" in question.lower() or "montante" in question.lower():
-                                    formatted_result = f"R$ {float(calculated_result):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                                else:
-                                    formatted_result = f"{int(calculated_result):,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            elif isinstance(calculated_result, dict):
-                                formatted_result = "\n" + "\n".join([f"- {k}: {v}" for k, v in calculated_result.items()])
-                            elif calculated_result is None or (isinstance(calculated_result, pd.Series) and calculated_result.empty) or (isinstance(calculated_result, str) and calculated_result == "Resultado não gerado pela IA"):
-                                formatted_result = "0" if ("R$" in response_template or "valor" in question.lower() or "custo" in question.lower() or "montante" in question.lower()) else "N/A"
-                            else:
-                                formatted_result = str(calculated_result)
-                            
-                            print(f"DEBUG: Resultado formatado (Estratégico): '{formatted_result}'")
-
-                            final_answer = response_template 
-                            
-                            match_analysis_content = re.search(
-                                r"Aqui está a sua análise:\n(.*?)(?=\n+Diagnóstico:|\n+Plano de Ação:|$)", 
-                                response_template, 
-                                re.DOTALL
-                            )
-
-                            if match_analysis_content:
-                                llm_inserted_analysis_content = match_analysis_content.group(1).strip()
-                                print(f"DEBUG: Conteúdo da análise detectado pelo LLM no template para substituição (Estratégico): '{llm_inserted_analysis_content}'")
-                                final_answer = final_answer.replace(llm_inserted_analysis_content, formatted_result, 1)
-                            elif '{{result}}' in response_template:
-                                print("DEBUG: O {{result}} placeholder foi encontrado (Estratégico). Realizando substituição direta.")
-                                final_answer = final_answer.replace('{{result}}', formatted_result)
-                            else:
-                                print("DEBUG: Nenhum padrão de análise nem {{result}} encontrado (Estratégico). Usando template original do LLM.")
-                                final_answer = response_template 
-                                
-                        print(f"DEBUG: Resposta final formatada e substituída (Estratégica): '{final_answer}'")
+                if plano_de_acao_text and plano_de_acao_text.lower() not in ['Não aplicável', 'não aplicavel', 'n/a', 'na']:
+                    full_response_for_user += f"\n\nPlano de Ação:\n{plano_de_acao_text}"
                 
-                except Exception as e_df_or_gemini_call:
-                    error_message_df = f'Ocorreu um erro ao criar DataFrame ou chamar Gemini para análise estratégica: {type(e_df_or_gemini_call).__name__}: {e_df_or_gemini_call}'
-                    print(f"ERROR (e_df_or_gemini_call): {error_message_df}")
-                    final_answer = f"Desculpe, houve um erro interno ao processar sua solicitação estratégica: {error_message_df}"
 
-            ChatMessage.objects.create(session_id=session_id, role='user', content=question)
-            ChatMessage.objects.create(session_id=session_id, role='ai', content=final_answer)
+                return JsonResponse({
+                    'answer': full_response_for_user,
+                    'diagnostico': diagnostico_text,
+                    'plano_de_acao': plano_de_acao_text,
+                    'dados_analisados': dados_analisados_json
+                }, status=200)
 
-            return JsonResponse({'answer': final_answer})
+            except json.JSONDecodeError:
+                print(f"ERROR: Gemini não retornou um JSON válido: {gemini_raw_response}")
+                return JsonResponse({'answer': 'Desculpe, tive um problema ao processar sua solicitação. Por favor, tente novamente.'}, status=500)
+            except ValueError as ve: # Captching ValueErrors
+                 print(f"ERROR: Erro de processamento da resposta do Gemini: {ve}. Resposta original: {gemini_raw_response}")
+                 return JsonResponse({'answer': 'Desculpe, a resposta da inteligência artificial não pôde ser processada. Por favor, tente novamente.'}, status=500)
+            except Exception as e: # Catch all other potential errors during parsing/processing
+                print(f"ERROR: Erro inesperado ao processar resposta do Gemini: {e}. Resposta original: {gemini_raw_response}")
+                return JsonResponse({'answer': 'Ocorreu um erro inesperado ao interpretar a resposta. Por favor, tente novamente.'}, status=500)
 
-        except json.JSONDecodeError as e_json:
-            error_message_json = f'Erro ao decodificar JSON na requisição: {e_json}'
-            print(f"ERROR (e_json): {error_message_json}")
-            return JsonResponse({'error': error_message_json}, status=400)
-        except Exception as e_outer:
-            error_message_outer = f'Ocorreu um erro no servidor antes do processamento da pergunta: {type(e_outer).__name__}: {e_outer}'
-            print(f"CRITICAL ERROR (e_outer): {error_message_outer}")
-            return JsonResponse({'error': error_message_outer}, status=500)
-
-    print("DEBUG: Método não permitido.")
-    return JsonResponse({'error': 'Método não permitido.'}, status=405)
+        except Exception as e:
+            print(f"ERROR: {e}")
+            return JsonResponse({'answer': f'Ocorreu um erro inesperado: {str(e)}'}, status=500)
+    
+    return JsonResponse({'answer': 'Método não permitido.'}, status=405)
 
 
-def create_code_generation_prompt(question, available_columns, chat_history_for_prompt=None):
+def get_dataframe_from_db():
+    vendas_queryset = Venda.objects.select_related('produto', 'cliente')
+    contas_receber_queryset = ContaReceber.objects.select_related('venda__produto', 'cliente', 'venda')
+    # contas_pagar_queryset = ContaPagar.objects.select_related('fornecedor')
 
-    column_list = "\n".join([f"- {col}" for col in available_columns])
+    dados_vendas = []
+    for v in vendas_queryset:
+        dados_vendas.append({
+            "tipo_registro": "Venda",
+            "id_origem": v.pk,
+            "produto_nome": v.produto.nome if v.produto else "N/A",
+            "cliente_nome": v.cliente.nome if v.cliente else "Consumidor Final",
+            "quantidade_vendida": v.quantidade,
+            "valor_total_venda": float(v.valor_total),
+            "data_transacao": v.data_venda.strftime('%Y-%m-%d'),
+            "status_venda_code": v.status,
+            "status_venda_display": v.get_status_display(),
+            "forma_pagamento": v.get_forma_pagamento_display(),
+            "condicao_prazo": v.get_condicao_prazo_display() if v.condicao_prazo else "À Vista",
+            # outers camps for consistency
+            "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
+            "fornecedor_nome": None, "valor_conta_pagar": None, "status_conta_pagar": None, "data_vencimento_pagar": None, "data_pagamento": None,
+        })
 
-    history_text = ""
-    if chat_history_for_prompt:
-        for msg in chat_history_for_prompt:
-            if msg['role'] == 'user':
-                history_text += f"Usuário: {msg['parts'][0]['text']}\n"
-            elif msg['role'] == 'ai':
-                analysis_match = re.search(r"Aqui está a sua análise:\n(.*?)(?=\n+Diagnóstico:|\n+Plano de Ação:|$)", msg['parts'][0]['text'], re.DOTALL)
-                
-                if analysis_match:
-                    history_text += f"Assistente (Análise): {analysis_match.group(1).strip()}\n"
-                else:
-                    first_line_of_ai_response = msg['parts'][0]['text'].split('\n')[0]
-                    history_text += f"Assistente: {first_line_of_ai_response}\n" # first line input
-            
-        history_text = "Histórico da conversa:\n" + history_text + "\n"
+    dados_contas_receber = []
+    for cr in contas_receber_queryset:
+        produto_nome_venda = cr.venda.produto.nome if cr.venda and cr.venda.produto else "N/A"
+        cliente_nome_cr = cr.cliente.nome if cr.cliente else (cr.venda.cliente.nome if cr.venda and cr.venda.cliente else "Consumidor Final")
 
-    prompt = f"""
-    Você é um consultor financeiro e estratégico experiente, com acesso completo aos dados de vendas e contas de uma empresa no formato de um DataFrame pandas chamado `df`.
-    Seu objetivo é ajudar o gestor a tomar decisões informadas e proativas, indo além de simples cálculos para fornecer insights acionáveis e planos de ação.
+        dados_contas_receber.append({
+            "tipo_registro": "ContaReceber", "id_origem": cr.pk,
+            "produto_nome": produto_nome_venda, "cliente_nome": cliente_nome_cr,
+            "quantidade_vendida": cr.venda.quantidade if cr.venda else None, 
+            "valor_total_venda": float(cr.venda.valor_total) if cr.venda and cr.venda.valor_total is not None else None, 
+            "data_transacao": cr.venda.data_venda.strftime('%Y-%m-%d') if cr.venda else None, # Data base
+            "status_venda_code": cr.venda.status if cr.venda else None, # Status da venda associada
+            "status_venda_display": cr.venda.get_status_display() if cr.venda else None,
+            "forma_pagamento": cr.venda.get_forma_pagamento_display() if cr.venda else None,
+            "condicao_prazo": cr.venda.get_condicao_prazo_display() if cr.venda and cr.venda.condicao_prazo else "À Vista",
+            "valor_conta_receber": float(cr.valor), "status_conta_receber": cr.status,
+            "data_vencimento_receber": cr.data_vencimento.strftime('%Y-%m-%d'),
+            "data_recebimento": cr.data_recebimento.strftime('%Y-%m-%d') if cr.data_recebimento else None,
+            "fornecedor_nome": None, "valor_conta_pagar": None, "status_conta_pagar": None, "data_vencimento_pagar": None, "data_pagamento": None,
+        })
+    
+    dados_contas_pagar = []
+    # for cp in contas_pagar_queryset:
+    #     fornecedor_nome_cp = cp.fornecedor.nome_empresa if cp.fornecedor else "N/A"
+    #     dados_contas_pagar.append({
+    #         "tipo_registro": "ContaPagar", "id_origem": cp.pk,
+    #         "fornecedor_nome": fornecedor_nome_cp,
+    #         "valor_conta_pagar": float(cp.valor), "status_conta_pagar": cp.status,
+    #         "status_conta_pagar_code": cp.status,
+    #         "status_conta_pagar_display": cp.get_status_display(),
+    #         "data_vencimento_pagar": cp.data_vencimento.strftime('%Y-%m-%d'),
+    #         "data_pagamento": cp.data_pagamento.strftime('%Y-%m-%d') if cp.data_pagamento else None,
+    #         # Preencher campos de outras categorias com None
+    #         "produto_nome": None, "cliente_nome": None, "quantidade_vendida": None, "valor_total_venda": None,
+    #         "data_transacao": None, "status_venda_code": None, "status_venda_display": None, "forma_pagamento": None, "condicao_prazo": None,
+    #         "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
+    #     })
 
-    O DataFrame `df` consolidado contém as seguintes colunas disponíveis:
-    {column_list}
+    df_list = dados_vendas + dados_contas_receber # + dados_contas_pagar 
+    df = pd.DataFrame(df_list)
 
-    Detalhes das colunas importantes:
-    - 'tipo_registro': Indica o tipo de registro ('Venda', 'ContaReceber', 'ContaPagar').
-    - 'status_venda_code': Código interno do status da venda (e.g., 'P', 'C').
-    - 'status_venda_display': Representação legível do status da venda (e.g., 'PENDENTE', 'CONCLUIDO').
-    - 'status_conta_receber_code': Código interno do status da conta a receber (e.g., 'ABERTO', 'RECEBIDO', 'ATRASADO').
-    - 'status_conta_receber_display': Representação legível do status da conta a receber (e.g., 'Aberto', 'Recebido', 'Atrasado').
-    - 'status_conta_pagar_code': Código interno do status da conta a pagar (e.g., 'ABERTO', 'PAGO', 'ATRASADO').
-    - 'status_conta_pagar_display': Representação legível do status da conta a pagar (e.g., 'Aberto', 'Pago', 'Atrasado').
-    - 'valor_conta_receber': Valor monetário da conta a receber.
-    - 'valor_conta_pagar': Valor monetário da conta a pagar.
-    - 'valor_total_venda': Valor total da venda.
-    - 'valor_total_venda_receber': Valor total da venda a receber.
-    - 'quantidade_vendida': Quantidade de itens vendidos na venda.
-    - 'quantidade_vendida_receber': Quantidade de itens vendidos na venda associada à conta a receber.
-    - 'data_transacao': Data da venda ou data base para o registro.
-    - 'data_recebimento': Data em que a conta a receber foi efetivamente recebida.
-    - 'data_pagamento': Data em que a conta a pagar foi efetivamente paga.
-    - 'cliente_nome': Nome do cliente.
-    - 'produto_nome': Nome do produto.
-    - 'fornecedor_nome': Nome do fornecedor.
+    if not df.empty:
+        # convert typings for pandas
+        for col in ['data_transacao', 'data_vencimento_receber', 'data_recebimento', 'data_vencimento_pagar', 'data_pagamento']:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+        for col in ['quantidade_vendida', 'valor_total_venda', 'valor_conta_receber', 'valor_conta_pagar']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    
+    return df
 
-    {history_text}
-    O usuário fez a seguinte pergunta: {question}
+def create_unified_agent_prompt(question, df_json_str):
+    return f"""
+    Você é um assistente de negócios especializado em analisar dados de Vendas e Contas a Receber de uma empresa.
+    Seu objetivo é responder às perguntas do usuário de forma precisa, com insights relevantes, diagnósticos e, quando apropriado, planos de ação.
+    Você tem acesso a dados detalhados no formato JSON, representando um DataFrame pandas.
 
-    Com base nesta pergunta e no histórico (se houver), você deve:
-    1. Gerar um fragmento de código Python (usando pandas) para analisar o `df` e obter o `result` solicitado. O código deve ser conciso e focar em gerar um único resultado final (número, string, dicionário, lista). **O `result` deve ser o dado puro, sem formatação de texto explicativo.**
-    2. Elaborar um texto de resposta que não apenas apresente o resultado (onde `{{result}}` será substituído pelo valor calculado), mas também:
-        - Um breve diagnóstico ou contextualização do resultado.
-        - Sugestões de 'Plano de Ação' concreto e acionável para o gestor.
-        - Possíveis impactos ou próximas etapas para essas ações.
-        - Não suponha, use somente as colunas como base para o diagnóstico e plano de ação.
-        - Use somente os nomes reais das colunas do DataFrame para referenciar os dados.
+    **REGRAS CRÍTICAS (LEIA ATENTAMENTE E SIGA RIGOROSAMENTE):**
+    1.  **FOCO RESTRITO:** Sua análise deve se concentrar **EXCLUSIVAMENTE em Vendas e Contas a Receber**. Ignore qualquer informação sobre "Contas a Pagar" ou fornecedores, a menos que seja estritamente necessário para um contexto muito limitado (ex: um valor total que inadvertidamente inclua Pagar, mas não gerar plano de ação para Pagar).
+    2.  **DADOS REAIS:** Use **SOMENTE** os dados fornecidos no JSON. **NÃO INVENTE, ADIVINHE OU FABRIQUE DADOS, NOMES (clientes, produtos), VALORES, OU CENÁRIOS QUE NÃO ESTEJAM NO JSON OU IMPLÍCITOS NELE.**
+    3.  **FORMULAÇÃO DA RESPOSTA:** Sempre retorne sua resposta como um objeto JSON. Este JSON DEVE ter as seguintes chaves:
+        -   `resposta_final`: (String) Uma resposta direta e conversacional à pergunta do usuário. Inclua números formatados (R$ X,XX, Y unidades).
+        -   `diagnostico`: (String) Um diagnóstico conciso e factual baseado nos dados analisados, identificando pontos fortes, fracos, ou tendências. **Se a pergunta for de natureza conversacional ou não exigir análise de dados, este campo deve ser uma string vazia ("").**
+        -   `plano_de_acao`: (String) Sugestões de ações práticas e acionáveis que o gestor pode tomar com base na análise. Seja específico e use os dados (nomes de produtos, clientes) do `dados_analisados` se relevante. Se o resultado indicar falta de dados para uma ação, mencione isso. **Se a pergunta for de natureza conversacional ou não exigir análise de dados, este campo deve ser uma string vazia ("").**
+        -   `dados_analisados`: (Objeto JSON) Um resumo dos cálculos e métricas chave que você usou na sua análise. **Se a pergunta for de natureza conversacional ou não exigir análise de dados, este campo deve ser um objeto JSON vazio ({{}}).**
+    4.  **SEMPRE UM JSON VÁLIDO:** O retorno DEVE ser um JSON válido.
+    5.  **CUIDADO COM DATAS:** As colunas de data (data_transacao, data_vencimento_receber, etc.) estão em formato string. Para cálculos baseados em tempo, você deve inferir como o usuário quer (ex: "último mês", "este ano").
 
-    **IMPORTANTE:**
-    - Se a pergunta não puder ser respondida com os dados disponíveis ou exigir mais detalhes, o `result` deve ser uma string explicando isso.
-    - O formato `{{result}}` é um placeholder. Não o substitua com o valor real; seu código Python fará isso.
+    ---
 
-    Formato da sua resposta:
-    ```python
-    # Seu código Python aqui. Exemplo: result = df['valor_total_venda'].sum()
+    **Dados Disponíveis (DataFrame JSON - primeiras 50 linhas ou filtrado para relevância):**
+    ```json
+    {df_json_str}
     ```
-    ---RESPOSTA---
-    Aqui está a sua análise:
-    {{result}}
 
-    Diagnóstico: [Seu diagnóstico baseado no resultado. Foco em fatos e implicações diretas. Se o `result` for uma string explicativa, baseie o diagnóstico nela.]
+    **Colunas Disponíveis e Seus Tipos/Valores Importantes:**
+    -   `tipo_registro`: "Venda", "ContaReceber" (use capitalização exata)
+    -   `produto_nome`: Nome do produto.
+    -   `cliente_nome`: Nome do cliente.
+    -   `quantidade_vendida`: Quantidade de itens em uma venda.
+    -   `valor_total_venda`: Valor monetário total de uma venda.
+    -   `data_transacao`: Data da venda ou transação.
+    -   `status_venda_code`: Status da venda (e.g., "P" para Pendente, "C" para Concluída - use capitalização exata).
+    -   `valor_conta_receber`: Valor monetário de uma conta a receber.
+    -   `status_conta_receber`: Status da conta a receber (e.g., "ABERTO", "RECEBIDO", "ATRASADO" - use capitalização exata).
+    -   `data_vencimento_receber`: Data de vencimento da conta a receber.
+    -   `data_recebimento`: Data de recebimento da conta a receber.
 
-    Plano de Ação:
-    1. **Ação 1:** [Descrição da ação] - *Justificativa e Impacto. Se a análise não for possível, sugira ações para obter mais dados ou refinar a pergunta.*
-    2. **Ação 2:** [Descrição da ação] - *Justificativa e Impacto.*
-    [Adicione mais ações conforme necessário]
+    ---
 
-    Procurando por mais insights? Pergunte-me sobre...
+    **Pergunta do Usuário:** "{question}"
+
+    ---
+
+    **Seu retorno JSON:**
+    ```json
+    {{
+        "resposta_final": "[Resposta direta para o usuário]",
+        "diagnostico": "[Diagnóstico com base nos dados]",
+        "plano_de_acao": "[Plano de ação específico]",
+        "dados_analisados": {{
+            "metrica_1": "valor",
+            "metrica_2": "valor"
+        }}
+    }}
+    ```
     """
-    return prompt

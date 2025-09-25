@@ -17,8 +17,8 @@ Este projeto é uma solução de gestão de sistemas que integra um chatbot inte
 
 1. **Clone o repositório:**
     ```bash
-    git clone <url-do-repositório>
-    cd <nome-do-projeto>
+    git clone https://github.com/Jhowkley/tcc_gestao.git
+    cd tcc_gestao
     ```
 
 2. **Crie e ative o ambiente virtual:**

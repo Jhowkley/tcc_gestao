@@ -480,7 +480,7 @@ def ask_api_view(request):
                 relevant_cols = [
                     'tipo_registro', 'id_origem', 'produto_nome', 'cliente_nome',
                     'quantidade_vendida', 'valor_total_venda', 'data_transacao', 'status_venda_code',
-                    'valor_conta_receber', 'status_conta_receber', 'data_vencimento_receber', 'data_recebimento'
+                    'valor_conta_receber', 'valor_conta_pagar', 'data_vencimento_pagar', 'status_conta_receber', 'data_vencimento_receber', 'data_recebimento'
                 ]
                 df_relevant = df[relevant_cols].head(50)
                 
@@ -514,15 +514,27 @@ def ask_api_view(request):
 
             try:
                 cleaned_response = gemini_raw_response.strip()
-                if cleaned_response.startswith('```json'):
-                    cleaned_response = cleaned_response[len('```json'):]
-                    
-                if cleaned_response.endswith('```'):
-                    cleaned_response = cleaned_response[:-len('```')]
-                cleaned_response = cleaned_response.strip() 
-                
+
+                # --- logic extract json from response ---
+                json_start_index = cleaned_response.find('```json')
+                json_end_index = cleaned_response.rfind('```')
+
+                if json_start_index != -1 and json_end_index != -1 and json_end_index > json_start_index:
+                    cleaned_response = cleaned_response[json_start_index + len('```json'):json_end_index]
+                elif cleaned_response.startswith('{') and cleaned_response.endswith('}'):
+                    pass
+                else:
+                    print(f"WARNING: Não foi possível encontrar os delimitadores '```json' e '```' na resposta do Gemini. Tentando parsear a resposta bruta. Resposta: {cleaned_response[:200]}")
+                    pass
+
+                cleaned_response = cleaned_response.strip()
+
                 if not cleaned_response:
-                    raise ValueError("Resposta do Gemini limpa resultou em string vazia.")
+                    raise ValueError("Resposta do Gemini limpa resultou em string vazia ou inválida.")
+                
+                print(f"DEBUG: Resposta limpa para JSON.loads: {cleaned_response[:1000]}...")
+
+                parsed_response = json.loads(cleaned_response)
 
                 print(f"DEBUG: Resposta limpa para JSON.loads: {cleaned_response[:1000]}...")
                 parsed_response = json.loads(cleaned_response)
@@ -567,7 +579,8 @@ def ask_api_view(request):
 def get_dataframe_from_db():
     vendas_queryset = Venda.objects.select_related('produto', 'cliente')
     contas_receber_queryset = ContaReceber.objects.select_related('venda__produto', 'cliente', 'venda')
-    # contas_pagar_queryset = ContaPagar.objects.select_related('fornecedor')
+    contas_pagar_queryset = ContaPagar.objects.select_related('fornecedor')
+    
 
     dados_vendas = []
     for v in vendas_queryset:
@@ -610,23 +623,24 @@ def get_dataframe_from_db():
         })
     
     dados_contas_pagar = []
-    # for cp in contas_pagar_queryset:
-    #     fornecedor_nome_cp = cp.fornecedor.nome_empresa if cp.fornecedor else "N/A"
-    #     dados_contas_pagar.append({
-    #         "tipo_registro": "ContaPagar", "id_origem": cp.pk,
-    #         "fornecedor_nome": fornecedor_nome_cp,
-    #         "valor_conta_pagar": float(cp.valor), "status_conta_pagar": cp.status,
-    #         "status_conta_pagar_code": cp.status,
-    #         "status_conta_pagar_display": cp.get_status_display(),
-    #         "data_vencimento_pagar": cp.data_vencimento.strftime('%Y-%m-%d'),
-    #         "data_pagamento": cp.data_pagamento.strftime('%Y-%m-%d') if cp.data_pagamento else None,
-    #         # Preencher campos de outras categorias com None
-    #         "produto_nome": None, "cliente_nome": None, "quantidade_vendida": None, "valor_total_venda": None,
-    #         "data_transacao": None, "status_venda_code": None, "status_venda_display": None, "forma_pagamento": None, "condicao_prazo": None,
-    #         "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
-    #     })
+    for cp in contas_pagar_queryset:
+        fornecedor_nome_cp = cp.fornecedor.nome_empresa if cp.fornecedor else "N/A"
+        dados_contas_pagar.append({
+            "tipo_registro": "ContaPagar", "id_origem": cp.pk,
+            "fornecedor_nome": fornecedor_nome_cp,
+            "valor_conta_pagar": float(cp.valor),
+            "status_conta_pagar": cp.status,
+            "status_conta_pagar_code": cp.status,
+            "status_conta_pagar_display": cp.get_status_display(),
+            "data_vencimento_pagar": cp.data_vencimento.strftime('%Y-%m-%d'),
+            "data_pagamento": cp.data_pagamento.strftime('%Y-%m-%d') if cp.data_pagamento else None,
+            "produto_nome": None, "cliente_nome": None, "quantidade_vendida": None, "valor_total_venda": None,
+            "data_transacao": None, "status_venda_code": None, "status_venda_display": None, "forma_pagamento": None, "condicao_prazo": None,
+            "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
+        })
+    
 
-    df_list = dados_vendas + dados_contas_receber # + dados_contas_pagar 
+    df_list = dados_vendas + dados_contas_receber + dados_contas_pagar 
     df = pd.DataFrame(df_list)
 
     if not df.empty:
@@ -647,16 +661,15 @@ def create_unified_agent_prompt(question, df_json_str):
     Você tem acesso a dados detalhados no formato JSON, representando um DataFrame pandas.
 
     **REGRAS CRÍTICAS (LEIA ATENTAMENTE E SIGA RIGOROSAMENTE):**
-    1.  **FOCO RESTRITO:** Sua análise deve se concentrar **EXCLUSIVAMENTE em Vendas e Contas a Receber**. Ignore qualquer informação sobre "Contas a Pagar" ou fornecedores, a menos que seja estritamente necessário para um contexto muito limitado (ex: um valor total que inadvertidamente inclua Pagar, mas não gerar plano de ação para Pagar).
+    1.  **FOCO RESTRITO:** Sua análise deve se concentrar **EXCLUSIVAMENTE em Vendas, Contas a Receber e Contas a Pagar**. 
     2.  **DADOS REAIS:** Use **SOMENTE** os dados fornecidos no JSON. **NÃO INVENTE, ADIVINHE OU FABRIQUE DADOS, NOMES (clientes, produtos), VALORES, OU CENÁRIOS QUE NÃO ESTEJAM NO JSON OU IMPLÍCITOS NELE.**
     3.  **FORMULAÇÃO DA RESPOSTA:** Sempre retorne sua resposta como um objeto JSON. Este JSON DEVE ter as seguintes chaves:
         -   `resposta_final`: (String) Uma resposta direta e conversacional à pergunta do usuário. Inclua números formatados (R$ X,XX, Y unidades).
-        -   `diagnostico`: (String) Um diagnóstico conciso e factual baseado nos dados analisados, identificando pontos fortes, fracos, ou tendências. **Se a pergunta for de natureza conversacional ou não exigir análise de dados, este campo deve ser uma string vazia ("").**
-        -   `plano_de_acao`: (String) Sugestões de ações práticas e acionáveis que o gestor pode tomar com base na análise. Seja específico e use os dados (nomes de produtos, clientes) do `dados_analisados` se relevante. Se o resultado indicar falta de dados para uma ação, mencione isso. **Se a pergunta for de natureza conversacional ou não exigir análise de dados, este campo deve ser uma string vazia ("").**
+        -   `diagnostico`: (String) Um diagnóstico conciso e factual baseado nos dados analisados, identificando pontos fortes, fracos, ou tendências. **Preencha este campo APENAS se a pergunta do usuário solicitar explicitamente uma análise, diagnóstico, ou insights aprofundados.** Caso contrário, deve ser uma string vazia ("").
+        -   `plano_de_acao`: (String) Sugestões de ações práticas e acionáveis que o gestor pode tomar com base na análise. Seja específico e use os dados (nomes de produtos, clientes, fornecedores) do `dados_analisados` se relevante. Se o resultado indicar falta de dados para uma ação, mencione isso. **Preencha este campo APENAS se a pergunta do usuário solicitar explicitamente um plano de ação, recomendações, ou "o que devo fazer?".** Caso contrário, deve ser uma string vazia ("").
         -   `dados_analisados`: (Objeto JSON) Um resumo dos cálculos e métricas chave que você usou na sua análise. **Se a pergunta for de natureza conversacional ou não exigir análise de dados, este campo deve ser um objeto JSON vazio ({{}}).**
-    4.  **SEMPRE UM JSON VÁLIDO:** O retorno DEVE ser um JSON válido.
-    5.  **CUIDADO COM DATAS:** As colunas de data (data_transacao, data_vencimento_receber, etc.) estão em formato string. Para cálculos baseados em tempo, você deve inferir como o usuário quer (ex: "último mês", "este ano").
-
+    4.  **CONDICIONALIDADE DE ANÁLISE/AÇÃO:** `diagnostico` e `plano_de_acao` SÃO OPCIONAIS e devem ser preenchidos APENAS quando a INTENÇÃO do usuário indicar uma solicitação de análise profunda ou recomendação de ação. Para perguntas simples de dados (ex: "Quantas vendas tivemos?", "Qual o valor da Conta a Pagar X?"), deixe `diagnostico` e `plano_de_acao` vazios.
+    5.  **SEMPRE UM JSON VÁLIDO:** O retorno DEVE ser um JSON válido.
     ---
 
     **Dados Disponíveis (DataFrame JSON - primeiras 50 linhas ou filtrado para relevância):**
@@ -665,7 +678,7 @@ def create_unified_agent_prompt(question, df_json_str):
     ```
 
     **Colunas Disponíveis e Seus Tipos/Valores Importantes:**
-    -   `tipo_registro`: "Venda", "ContaReceber" (use capitalização exata)
+    -   `tipo_registro`: "Venda", "ContaReceber", "ContaPagar" (use capitalização exata)
     -   `produto_nome`: Nome do produto.
     -   `cliente_nome`: Nome do cliente.
     -   `quantidade_vendida`: Quantidade de itens em uma venda.
@@ -673,9 +686,13 @@ def create_unified_agent_prompt(question, df_json_str):
     -   `data_transacao`: Data da venda ou transação.
     -   `status_venda_code`: Status da venda (e.g., "P" para Pendente, "C" para Concluída - use capitalização exata).
     -   `valor_conta_receber`: Valor monetário de uma conta a receber.
-    -   `status_conta_receber`: Status da conta a receber (e.g., "ABERTO", "RECEBIDO", "ATRASADO" - use capitalização exata).
+    -   `status_conta_receber`: Status da conta a receber (e.g., "ABERTO" ainda não foi pago, "RECEBIDO" está pago, "ATRASADO" está atrasado - use capitalização exata).
     -   `data_vencimento_receber`: Data de vencimento da conta a receber.
     -   `data_recebimento`: Data de recebimento da conta a receber.
+    -   `valor_conta_pagar`: Valor monetário de uma conta a pagar.
+    -   `status_conta_pagar`: Status da conta a pagar (e.g., "ABERTO", "PAGO", "ATRASADO" - use capitalização exata).
+    -   `data_vencimento_pagar`: Data de vencimento da conta a pagar. 
+    -   `data_pagamento`: Data de pagamento da conta a pagar. 
 
     ---
 

@@ -14,3 +14,4 @@ django-cors-headers==4.3.1 # Para permitir a comunicação entre front-end e bac
 
 # --- Outras dependências ---
 PyYAML==6.0.1 # Dependência do PandasAI
+python-dotenv==1.0.0 # Para carregar variáveis de ambiente do arquivo .env

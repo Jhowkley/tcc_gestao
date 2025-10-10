@@ -2,6 +2,7 @@ from django.db import models
 from django.utils import timezone
 from django.urls import reverse
 from decimal import Decimal
+from django.contrib.auth.models import User
 
 class Fornecedor(models.Model):
     nome_empresa = models.CharField(max_length=255)

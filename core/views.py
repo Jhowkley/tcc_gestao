@@ -4,6 +4,7 @@ import dotenv
 import re 
 import pandas as pd
 import google.generativeai as genai
+import logging
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -17,10 +18,13 @@ from datetime import date, timedelta
 from decimal import Decimal
 from string import Template
 from django.http import JsonResponse
-import logging
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth import login,logout
+
 
 logger = logging.getLogger(__name__)
 
+@login_required
 def dashboard_view(request):
 
     total_vendas = Venda.objects.all().count()
@@ -82,11 +86,12 @@ def dashboard_view(request):
     }
     return render(request, 'core/dashboard.html', context)
 
-
+@login_required
 def lista_categorias_view(request):
     categorias = Categoria.objects.all()
     return render(request, 'core/lista_categorias.html', {'categorias': categorias})
 
+@login_required
 def categoria_form_view(request, pk=None):
     if pk:
         instance = get_object_or_404(Categoria, pk=pk)
@@ -112,10 +117,12 @@ def categoria_delete_view(request, pk):
         return redirect('lista_categorias')
     return render(request, 'core/confirm_delete.html', {'instance': categoria, 'titulo': 'Deletar Categoria'})
 
+@login_required
 def lista_fornecedores_view(request): 
     fornecedores = Fornecedor.objects.all()
     return render(request, 'core/lista_fornecedores.html', {'fornecedores': fornecedores})
 
+@login_required
 def fornecedor_form_view(request, pk=None):
     if pk:
         instance = get_object_or_404(Fornecedor, pk=pk)
@@ -134,6 +141,7 @@ def fornecedor_form_view(request, pk=None):
 
     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo})
 
+@login_required
 def fornecedor_delete_view(request, pk):
     fornecedor = get_object_or_404(Fornecedor, pk=pk)
     if request.method == 'POST':
@@ -141,11 +149,12 @@ def fornecedor_delete_view(request, pk):
         return redirect('lista_fornecedores')
     return render(request, 'core/confirm_delete.html', {'instance': fornecedor, 'titulo': 'Deletar Fornecedor'})
 
-
+@login_required
 def lista_produtos_view(request):
     produtos = Produto.objects.all().select_related('categoria', 'fornecedor')
     return render(request, 'core/lista_produtos.html', {'produtos': produtos})
 
+@login_required
 def produto_form_view(request, pk=None):
     if pk:
         instance = get_object_or_404(Produto, pk=pk)
@@ -164,6 +173,7 @@ def produto_form_view(request, pk=None):
 
     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo})
 
+@login_required
 def produto_delete_view(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     if request.method == 'POST':
@@ -171,11 +181,12 @@ def produto_delete_view(request, pk):
         return redirect('lista_produtos')
     return render(request, 'core/confirm_delete.html', {'instance': produto, 'titulo': 'Deletar Produto'})
 
-
+@login_required
 def lista_clientes_view(request):
     clientes = Cliente.objects.all()
     return render(request, 'core/lista_clientes.html', {'clientes': clientes})
 
+@login_required
 def cliente_form_view(request, pk=None):
     if pk:
         instance = get_object_or_404(Cliente, pk=pk)
@@ -194,6 +205,7 @@ def cliente_form_view(request, pk=None):
 
     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo})
 
+@login_required
 def cliente_delete_view(request, pk): 
     cliente = get_object_or_404(Cliente, pk=pk)
     if request.method == 'POST':
@@ -201,11 +213,12 @@ def cliente_delete_view(request, pk):
         return redirect('lista_clientes')
     return render(request, 'core/confirm_delete.html', {'instance': cliente, 'titulo': 'Deletar Cliente'})
 
-
+@login_required
 def lista_vendas_view(request):
     vendas = Venda.objects.all().select_related('produto', 'cliente').order_by('-data_venda')
     return render(request, 'core/lista_vendas.html', {'vendas': vendas})
 
+@login_required
 def venda_form_view(request, pk=None):
     product_prices = {str(p.id): float(p.preco_venda) for p in Produto.objects.all()}
 
@@ -331,6 +344,7 @@ def venda_form_view(request, pk=None):
     }
     return render(request, 'core/form_generico.html', context)
 
+@login_required
 def venda_delete_view(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
     if request.method == 'POST':
@@ -348,7 +362,7 @@ def venda_delete_view(request, pk):
         return redirect('lista_vendas')
     return render(request, 'core/confirm_delete.html', {'instance': venda, 'titulo': 'Deletar Venda'})
 
-
+@login_required
 def lista_contas_receber_view(request):
     print("\nDEBUG: Acessando lista_contas_receber_view.") 
     
@@ -371,6 +385,7 @@ def lista_contas_receber_view(request):
     print("DEBUG: Contexto para template de Contas a Receber preparado.") 
     return render(request, 'core/lista_contas_receber.html', context)
 
+@login_required
 def conta_receber_form_view(request, pk=None):
     if pk:
         instance = get_object_or_404(ContaReceber, pk=pk)
@@ -389,6 +404,7 @@ def conta_receber_form_view(request, pk=None):
 
     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo})
 
+@login_required
 def conta_receber_delete_view(request, pk): # Adicionado
     conta = get_object_or_404(ContaReceber, pk=pk)
     if request.method == 'POST':
@@ -396,6 +412,7 @@ def conta_receber_delete_view(request, pk): # Adicionado
         return redirect('lista_contas_receber')
     return render(request, 'core/confirm_delete.html', {'instance': conta, 'titulo': 'Deletar Conta a Receber'})
 
+@login_required
 @csrf_exempt
 def marcar_conta_receber_recebida(request, pk):
     if request.method == 'GET':
@@ -409,7 +426,7 @@ def marcar_conta_receber_recebida(request, pk):
     return JsonResponse({'status': 'error', 'message': 'Método não permitido.'}, status=405)
 
 
-
+@login_required
 def lista_contas_pagar_view(request): 
     contas = ContaPagar.objects.all().select_related('fornecedor').order_by('-data_vencimento')
     context ={
@@ -419,6 +436,7 @@ def lista_contas_pagar_view(request):
     }
     return render(request, 'core/lista_contas_pagar.html', context)
 
+@login_required
 def conta_pagar_form_view(request, pk=None):
     if pk:
         instance = get_object_or_404(ContaPagar, pk=pk)
@@ -437,6 +455,7 @@ def conta_pagar_form_view(request, pk=None):
 
     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo})
 
+@login_required
 def conta_pagar_delete_view(request, pk):
     conta = get_object_or_404(ContaPagar, pk=pk)
     if request.method == 'POST':
@@ -444,6 +463,7 @@ def conta_pagar_delete_view(request, pk):
         return redirect('lista_contas_pagar')
     return render(request, 'core/confirm_delete.html', {'instance': conta, 'titulo': 'Deletar Conta a Pagar'})
 
+@login_required
 @csrf_exempt 
 def marcar_conta_pagar_paga(request, pk):
     if request.method == 'POST':
@@ -713,3 +733,7 @@ def create_unified_agent_prompt(question, df_json_str):
     }}
     ```
     """
+    
+def logout_view(request):
+    logout(request)
+    return redirect('login')

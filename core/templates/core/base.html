@@ -218,8 +218,14 @@
                 </h1>
                 <div class="header-actions">
                     <div class="user-info">
-                        <span>Admin</span>
-                        <span class="email">admin@sistema.com</span>
+                        {% if user.is_authenticated %}
+                        <span>{{ user.username }}</span>
+                        <span class="email">{{ user.email }}</span>
+                        <form action="{% url 'logout_view' %}" method="post" style="display: inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger mt-2" style="width:auto;">Sair</button>
+                         </form>
+                        {% endif %}
                     </div>
                 </div>
             </header>

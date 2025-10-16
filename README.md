@@ -43,6 +43,12 @@ Este projeto é uma solução de gestão de sistemas que integra um chatbot inte
 5. **Acesse o sistema:**
     Abra o navegador e acesse `http://localhost:8000`
 
+## Users
+
+Por padrão a aplicação tem um superuser.
+user: admin
+password: admin
+
 ## Contribuição
 
 Sinta-se livre para abrir issues e enviar pull requests!

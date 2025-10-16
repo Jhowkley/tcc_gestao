@@ -14,22 +14,29 @@
             --sidebar-text-hover: #ffffff;
             --content-bg: #f9fafb;
             --border-color: #e5e7eb;
+            --card-bg: #fff;
+            --sidebar-width: 250px;
+            --collapsed-sidebar-width: 0;
         }
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
             margin: 0; 
             background-color: var(--content-bg);
             height: 100vh;
-            overflow: hidden; /* overflow main-content */
+            /* overflow: hidden;  overflow main-content */
         }
         .app-wrapper { 
             display: flex; 
-            height: 100%; 
+            height: 100%;
+            overflow-x: hidden; /* Evita barra horizontal ao colapsar sidebar */
+        }
+        .app-wrapper.sidebar-collapsed .main-container {
+             margin-left: 0; /* Ajusta o main-container para começar no 0 */
         }
 
         /* --- Sidebar (Navigation) --- */
         #sidebar {
-            width: 250px;
+            width: var(--sidebar-width);
             background-color: var(--sidebar-bg);
             color: white;
             display: flex;
@@ -38,8 +45,11 @@
             height: 100%;
             transition: margin-left 0.3s ease-in-out;
             overflow-y: auto; /* Permite rolagem se muitos itens */
+            position: relative;
+            z-index: 100; /* Garante que a sidebar fique acima do conteúdo principal */
         }
-        #sidebar.collapsed { margin-left: -250px; }
+        #sidebar.collapsed { width: var(--collapsed-sidebar-width); overflow: hidden; 
+            white-space: nowrap; }
         .sidebar-header { padding: 20px; font-size: 24px; font-weight: bold; text-align: center; }
         .sidebar-nav a {
             color: var(--sidebar-text);
@@ -57,7 +67,7 @@
         .sidebar-nav a i { width: 20px; text-align: center; }
 
         /* --- Conteúdo Principal e Header --- */
-        .main-container { width: 100%; display: flex; flex-direction: column; }
+        .main-container {flex: 1; display: flex; flex-direction: column; transition: margin-left 0.3s ease-in-out; }
         #top-header {
             display: flex;
             align-items: center;
@@ -66,14 +76,14 @@
             border-bottom: 1px solid var(--border-color);
             flex-shrink: 0; /* Impede que o header encolha */
         }
-        #sidebar-toggle { background: none; border: none; font-size: 24px; cursor: pointer; }
+        #sidebar-toggle { background: none; border: none; font-size: 24px; cursor: pointer; padding-right: 20px; }
         .header-title { font-size: 28px; font-weight: bold; margin-left: 20px; }
         .header-actions { margin-left: auto; display: flex; align-items: center; gap: 20px; }
         .user-info { text-align: right; }
         .user-info span { display: block; }
         .user-info .email { font-size: 12px; color: #6b7280; }
 
-        .main-content { flex-grow: 1; padding: 30px; overflow-y: auto; /* Conteúdo rola aqui */ }
+        .main-content { flex-grow: 1; padding: 30px; overflow-y: auto; overflow-x: hidden; /* Conteúdo rola aqui */ }
 
         /* --- Estilos Gerais para Cards e Tabelas (úteis para todos os templates) --- */
         .page-header {
@@ -186,7 +196,6 @@
                 <a href="{% url 'lista_fornecedores' %}"><i class="fa-solid fa-truck-fast"></i> Fornecedores</a>
                 <a href="{% url 'lista_contas_pagar' %}"><i class="fa-solid fa-file-invoice-dollar"></i> Contas a Pagar</a>
                 <a href="{% url 'lista_contas_receber' %}"><i class="fa-solid fa-hand-holding-dollar"></i> Contas a Receber</a>
-                <a href="#"><i class="fa-solid fa-chart-line"></i> Análise Financeira</a>
             </div>
         </nav>
 
@@ -209,8 +218,6 @@
                             Contas a Pagar
                         {% elif request.resolver_match.url_name == 'lista_contas_receber' %}
                             Contas a Receber
-                        {% elif request.resolver_match.url_name == 'analise_financeira' %}
-                            Análise Financeira
                         {% else %}
                             Menu
                         {% endif %}

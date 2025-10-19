@@ -51,4 +51,7 @@ urlpatterns = [
     
     # URL da API do Chatbot
     path('api/ask/', views.ask_api_view, name='ask_api'),
+    # URL de login e logout
+    path('sair/', views.logout_view, name='logout_view'),
+    # URL Análise Financeira
 ]

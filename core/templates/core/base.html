@@ -14,22 +14,27 @@
             --sidebar-text-hover: #ffffff;
             --content-bg: #f9fafb;
             --border-color: #e5e7eb;
+            --card-bg: #fff;
+            --sidebar-width: 250px;
+            --collapsed-sidebar-width: 0;
         }
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
             margin: 0; 
             background-color: var(--content-bg);
             height: 100vh;
-            overflow: hidden; /* overflow main-content */
         }
         .app-wrapper { 
             display: flex; 
-            height: 100%; 
+            height: 100%;
+            overflow-x: hidden;
+        }
+        .app-wrapper.sidebar-collapsed .main-container {
+             margin-left: 0; 
         }
 
-        /* --- Sidebar (Navigation) --- */
         #sidebar {
-            width: 250px;
+            width: var(--sidebar-width);
             background-color: var(--sidebar-bg);
             color: white;
             display: flex;
@@ -37,9 +42,12 @@
             flex-shrink: 0;
             height: 100%;
             transition: margin-left 0.3s ease-in-out;
-            overflow-y: auto; /* Permite rolagem se muitos itens */
+            overflow-y: auto;
+            position: relative;
+            z-index: 100; 
         }
-        #sidebar.collapsed { margin-left: -250px; }
+        #sidebar.collapsed { width: var(--collapsed-sidebar-width); overflow: hidden; 
+            white-space: nowrap; }
         .sidebar-header { padding: 20px; font-size: 24px; font-weight: bold; text-align: center; }
         .sidebar-nav a {
             color: var(--sidebar-text);
@@ -56,26 +64,24 @@
         .sidebar-nav a.active { background-color: var(--primary-color); color: var(--sidebar-text-hover); }
         .sidebar-nav a i { width: 20px; text-align: center; }
 
-        /* --- Conteúdo Principal e Header --- */
-        .main-container { width: 100%; display: flex; flex-direction: column; }
+        .main-container {flex: 1; display: flex; flex-direction: column; transition: margin-left 0.3s ease-in-out; }
         #top-header {
             display: flex;
             align-items: center;
             padding: 15px 30px;
             background-color: #fff;
             border-bottom: 1px solid var(--border-color);
-            flex-shrink: 0; /* Impede que o header encolha */
+            flex-shrink: 0; 
         }
-        #sidebar-toggle { background: none; border: none; font-size: 24px; cursor: pointer; }
+        #sidebar-toggle { background: none; border: none; font-size: 24px; cursor: pointer; padding-right: 20px; }
         .header-title { font-size: 28px; font-weight: bold; margin-left: 20px; }
         .header-actions { margin-left: auto; display: flex; align-items: center; gap: 20px; }
         .user-info { text-align: right; }
         .user-info span { display: block; }
         .user-info .email { font-size: 12px; color: #6b7280; }
 
-        .main-content { flex-grow: 1; padding: 30px; overflow-y: auto; /* Conteúdo rola aqui */ }
+        .main-content { flex-grow: 1; padding: 30px; overflow-y: auto; overflow-x: hidden;  }
 
-        /* --- Estilos Gerais para Cards e Tabelas (úteis para todos os templates) --- */
         .page-header {
             display: flex;
             justify-content: space-between;
@@ -97,10 +103,10 @@
             transition: background-color 0.2s;
         }
         .btn:hover {
-            background-color: #4338ca; /* Um tom mais escuro de roxo */
+            background-color: #4338ca; 
         }
         .btn-success {
-            background-color: #16a34a; /* Verde */
+            background-color: #16a34a; 
         }
         .btn-success:hover {
             background-color: #15803d;
@@ -122,8 +128,8 @@
         .styled-table thead th {
             text-align: left;
             padding: 12px 15px;
-            background-color: #f9fafb; /* Cinza bem claro */
-            color: #6b7280; /* Cinza escuro */
+            background-color: #f9fafb; 
+            color: #6b7280; 
             font-weight: 600;
             border-bottom: 2px solid var(--border-color);
         }
@@ -146,7 +152,7 @@
             text-decoration: underline;
         }
         .status-pendente, .status-aberto {
-            background-color: #fcd34d; /* Amarelo */
+            background-color: #fcd34d; 
             color: #92400e;
             padding: 3px 8px;
             border-radius: 4px;
@@ -154,7 +160,7 @@
             font-weight: 500;
         }
         .status-pago, .status-recebido {
-            background-color: #a7f3d0; /* Verde */
+            background-color: #a7f3d0; 
             color: #065f46;
             padding: 3px 8px;
             border-radius: 4px;
@@ -162,7 +168,7 @@
             font-weight: 500;
         }
         .status-atrasado {
-            background-color: #fecaca; /* Vermelho */
+            background-color: #fecaca;
             color: #991b1b;
             padding: 3px 8px;
             border-radius: 4px;
@@ -171,7 +177,7 @@
         }
         /* #chat-toggle-button, #chatbot-container-wrapper, #chatbot-header, #chat-messages,
            #chat-form, #chat-input, #chat-submit, .message, .user-message, .bot-message,
-           #typing-indicator, #typing-indicator .dot { display: none; } /* ou remova completamente se não for necessário */
+           #typing-indicator, #typing-indicator .dot { display: none; } 
     </style>
 </head>
 <body>
@@ -186,7 +192,6 @@
                 <a href="{% url 'lista_fornecedores' %}"><i class="fa-solid fa-truck-fast"></i> Fornecedores</a>
                 <a href="{% url 'lista_contas_pagar' %}"><i class="fa-solid fa-file-invoice-dollar"></i> Contas a Pagar</a>
                 <a href="{% url 'lista_contas_receber' %}"><i class="fa-solid fa-hand-holding-dollar"></i> Contas a Receber</a>
-                <a href="#"><i class="fa-solid fa-chart-line"></i> Análise Financeira</a>
             </div>
         </nav>
 
@@ -209,8 +214,6 @@
                             Contas a Pagar
                         {% elif request.resolver_match.url_name == 'lista_contas_receber' %}
                             Contas a Receber
-                        {% elif request.resolver_match.url_name == 'analise_financeira' %}
-                            Análise Financeira
                         {% else %}
                             Menu
                         {% endif %}
@@ -218,8 +221,14 @@
                 </h1>
                 <div class="header-actions">
                     <div class="user-info">
-                        <span>Admin</span>
-                        <span class="email">admin@sistema.com</span>
+                        {% if user.is_authenticated %}
+                        <span>{{ user.username }}</span>
+                        <span class="email">{{ user.email }}</span>
+                        <form action="{% url 'logout_view' %}" method="post" style="display: inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger mt-2" style="width:auto;">Sair</button>
+                         </form>
+                        {% endif %}
                     </div>
                 </div>
             </header>

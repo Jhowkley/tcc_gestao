@@ -1,0 +1,34 @@
+{% extends 'core/base_login.html' %}
+{%load static%}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<h3 class="text-center mb-4">Login</h3> {# Centralize o título da sua div #}
+<form method="post">
+    {% csrf_token %}
+    
+    {% comment %} Substitua o input manual pelo form.as_p ou form.as_table para usar o form gerado pelo Django, se você estiver usando um AuthenticationForm {% endcomment %}
+    {# Se estiver usando AuthenticationForm, o código abaixo pode ser substituído por: #}
+    {#{{ form.as_p }}    <div class="mb-3">#}
+    <div class="mb-3">
+        <label for="id_username" class="form-label">Usuário</label>
+        <input type="text" name="username" id="id_username" class="form-control" required>
+    </div>
+    
+    <div class="mb-3">
+        <label for="id_password" class="form-label">Senha</label>
+        <input type="password" name="password" id="id_password" class="form-control" required>
+    </div>
+    
+    {% if form.errors %}
+    <div class="alert alert-danger mt-3"> {# Adicione uma margem superior #}
+        Usuário ou senha incorretos. Tente novamente.
+    </div>
+    {% endif %}
+    
+    <div class="d-grid"> {# Faz o botão ocupar 100% da largura #}
+        <button type="submit" class="btn btn-primary mt-3">Entrar</button>
+    </div>
+</form>
+{% endblock %}

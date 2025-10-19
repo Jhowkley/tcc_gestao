@@ -4,6 +4,8 @@ import dotenv
 import re 
 import pandas as pd
 import google.generativeai as genai
+import logging
+import calendar
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -17,10 +19,14 @@ from datetime import date, timedelta
 from decimal import Decimal
 from string import Template
 from django.http import JsonResponse
-import logging
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth import login,logout
+from django.utils import timezone
+
 
 logger = logging.getLogger(__name__)
 
+@login_required
 def dashboard_view(request):
 
     total_vendas = Venda.objects.all().count()
@@ -82,11 +88,12 @@ def dashboard_view(request):
     }
     return render(request, 'core/dashboard.html', context)
 
-
+@login_required
 def lista_categorias_view(request):
     categorias = Categoria.objects.all()
     return render(request, 'core/lista_categorias.html', {'categorias': categorias})
 
+@login_required
 def categoria_form_view(request, pk=None):
     if pk:
         instance = get_object_or_404(Categoria, pk=pk)
@@ -112,10 +119,12 @@ def categoria_delete_view(request, pk):
         return redirect('lista_categorias')
     return render(request, 'core/confirm_delete.html', {'instance': categoria, 'titulo': 'Deletar Categoria'})
 
+@login_required
 def lista_fornecedores_view(request): 
     fornecedores = Fornecedor.objects.all()
     return render(request, 'core/lista_fornecedores.html', {'fornecedores': fornecedores})
 
+@login_required
 def fornecedor_form_view(request, pk=None):
     if pk:
         instance = get_object_or_404(Fornecedor, pk=pk)
@@ -134,6 +143,7 @@ def fornecedor_form_view(request, pk=None):
 
     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo})
 
+@login_required
 def fornecedor_delete_view(request, pk):
     fornecedor = get_object_or_404(Fornecedor, pk=pk)
     if request.method == 'POST':
@@ -141,11 +151,12 @@ def fornecedor_delete_view(request, pk):
         return redirect('lista_fornecedores')
     return render(request, 'core/confirm_delete.html', {'instance': fornecedor, 'titulo': 'Deletar Fornecedor'})
 
-
+@login_required
 def lista_produtos_view(request):
     produtos = Produto.objects.all().select_related('categoria', 'fornecedor')
     return render(request, 'core/lista_produtos.html', {'produtos': produtos})
 
+@login_required
 def produto_form_view(request, pk=None):
     if pk:
         instance = get_object_or_404(Produto, pk=pk)
@@ -164,6 +175,7 @@ def produto_form_view(request, pk=None):
 
     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo})
 
+@login_required
 def produto_delete_view(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     if request.method == 'POST':
@@ -171,11 +183,12 @@ def produto_delete_view(request, pk):
         return redirect('lista_produtos')
     return render(request, 'core/confirm_delete.html', {'instance': produto, 'titulo': 'Deletar Produto'})
 
-
+@login_required
 def lista_clientes_view(request):
     clientes = Cliente.objects.all()
     return render(request, 'core/lista_clientes.html', {'clientes': clientes})
 
+@login_required
 def cliente_form_view(request, pk=None):
     if pk:
         instance = get_object_or_404(Cliente, pk=pk)
@@ -194,6 +207,7 @@ def cliente_form_view(request, pk=None):
 
     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo})
 
+@login_required
 def cliente_delete_view(request, pk): 
     cliente = get_object_or_404(Cliente, pk=pk)
     if request.method == 'POST':
@@ -201,11 +215,12 @@ def cliente_delete_view(request, pk):
         return redirect('lista_clientes')
     return render(request, 'core/confirm_delete.html', {'instance': cliente, 'titulo': 'Deletar Cliente'})
 
-
+@login_required
 def lista_vendas_view(request):
     vendas = Venda.objects.all().select_related('produto', 'cliente').order_by('-data_venda')
     return render(request, 'core/lista_vendas.html', {'vendas': vendas})
 
+@login_required
 def venda_form_view(request, pk=None):
     product_prices = {str(p.id): float(p.preco_venda) for p in Produto.objects.all()}
 
@@ -331,6 +346,7 @@ def venda_form_view(request, pk=None):
     }
     return render(request, 'core/form_generico.html', context)
 
+@login_required
 def venda_delete_view(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
     if request.method == 'POST':
@@ -348,7 +364,7 @@ def venda_delete_view(request, pk):
         return redirect('lista_vendas')
     return render(request, 'core/confirm_delete.html', {'instance': venda, 'titulo': 'Deletar Venda'})
 
-
+@login_required
 def lista_contas_receber_view(request):
     print("\nDEBUG: Acessando lista_contas_receber_view.") 
     
@@ -371,6 +387,7 @@ def lista_contas_receber_view(request):
     print("DEBUG: Contexto para template de Contas a Receber preparado.") 
     return render(request, 'core/lista_contas_receber.html', context)
 
+@login_required
 def conta_receber_form_view(request, pk=None):
     if pk:
         instance = get_object_or_404(ContaReceber, pk=pk)
@@ -389,13 +406,15 @@ def conta_receber_form_view(request, pk=None):
 
     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo})
 
-def conta_receber_delete_view(request, pk): # Adicionado
+@login_required
+def conta_receber_delete_view(request, pk): 
     conta = get_object_or_404(ContaReceber, pk=pk)
     if request.method == 'POST':
         conta.delete()
         return redirect('lista_contas_receber')
     return render(request, 'core/confirm_delete.html', {'instance': conta, 'titulo': 'Deletar Conta a Receber'})
 
+@login_required
 @csrf_exempt
 def marcar_conta_receber_recebida(request, pk):
     if request.method == 'GET':
@@ -409,7 +428,7 @@ def marcar_conta_receber_recebida(request, pk):
     return JsonResponse({'status': 'error', 'message': 'Método não permitido.'}, status=405)
 
 
-
+@login_required
 def lista_contas_pagar_view(request): 
     contas = ContaPagar.objects.all().select_related('fornecedor').order_by('-data_vencimento')
     context ={
@@ -419,6 +438,7 @@ def lista_contas_pagar_view(request):
     }
     return render(request, 'core/lista_contas_pagar.html', context)
 
+@login_required
 def conta_pagar_form_view(request, pk=None):
     if pk:
         instance = get_object_or_404(ContaPagar, pk=pk)
@@ -437,6 +457,7 @@ def conta_pagar_form_view(request, pk=None):
 
     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo})
 
+@login_required
 def conta_pagar_delete_view(request, pk):
     conta = get_object_or_404(ContaPagar, pk=pk)
     if request.method == 'POST':
@@ -444,6 +465,7 @@ def conta_pagar_delete_view(request, pk):
         return redirect('lista_contas_pagar')
     return render(request, 'core/confirm_delete.html', {'instance': conta, 'titulo': 'Deletar Conta a Pagar'})
 
+@login_required
 @csrf_exempt 
 def marcar_conta_pagar_paga(request, pk):
     if request.method == 'POST':
@@ -473,38 +495,56 @@ def ask_api_view(request):
             if not question:
                 return JsonResponse({'answer': 'Por favor, faça uma pergunta.'}, status=400)
             
-            df = get_dataframe_from_db() 
+            if not session_id:
+                return JsonResponse({'answer': 'Erro: ID de sessão não fornecido.'}, status=400)
+
+            ChatMessage.objects.create(session_id=session_id, role='user', content=question)
+
+            history_messages = ChatMessage.objects.filter(session_id=session_id).order_by('timestamp')
+            
+            
+            gemini_history = []
+            for msg in history_messages:
+                gemini_history.append({
+                    'role': 'user' if msg.role == 'user' else 'model', 
+                    'parts': [msg.content]
+                })
+
+            print(f"DEBUG: Histórico de chat para session_id {session_id}:")
+            for h_msg in gemini_history:
+                print(f"  - {h_msg['role']}: {h_msg['parts'][0][:100]}...") 
+                
+            df = get_dataframe_from_db()
+            agreggated_metrics = get_aggregated_metrics(df) 
 
             df_for_gemini_str = ""
             if not df.empty:
                 relevant_cols = [
                     'tipo_registro', 'id_origem', 'produto_nome', 'cliente_nome',
                     'quantidade_vendida', 'valor_total_venda', 'data_transacao', 'status_venda_code',
-                    'valor_conta_receber', 'valor_conta_pagar', 'data_vencimento_pagar', 'status_conta_receber', 'data_vencimento_receber', 'data_recebimento'
+                    'valor_conta_receber', 'valor_conta_pagar', 'data_vencimento_pagar', 
+                    'status_conta_receber', 'data_vencimento_receber', 'data_recebimento'
                 ]
                 df_relevant = df[relevant_cols].head(50)
                 
-                for col in ['data_transacao', 'data_vencimento_receber', 'data_recebimento']:
+                for col in ['data_transacao', 'data_vencimento_receber', 'data_recebimento', 'data_vencimento_pagar', 'data_lancamento_pagar', 'data_pagamento_pagar']: 
                     if col in df_relevant.columns:
                         df_relevant[col] = df_relevant[col].dt.strftime('%Y-%m-%d %H:%M:%S').fillna('N/A')
 
                 df_for_gemini_str = df_relevant.to_json(orient="records", date_format="iso")
                 print(f"DEBUG: DataFrame para Gemini (primeiras 50 linhas): {df_for_gemini_str[:500]}...")
 
-            agent_prompt = create_unified_agent_prompt(question, df_for_gemini_str)
+            
+            agent_prompt = create_unified_agent_prompt(question, df_for_gemini_str, agreggated_metrics)
             print(f"DEBUG: Prompt Único para Gemini: \n{agent_prompt[:2000]}...")
 
+            # start the chat with the history
+            chat = model.start_chat(history=gemini_history) 
             
-            chat = model.start_chat(history=[]) 
-            
-            # Configurações do LLM (Temperatura, top_p, top_k)
-            # A temperatura controla a aleatoriedade. 0.0 é determinístico, 1.0 é mais criativo.
-            # Para relatórios financeiros, queremos algo mais determinístico (0.0 a 0.5)
-            # top_p e top_k controlam a diversidade das palavras.
             response = chat.send_message(
                 agent_prompt,
                 generation_config=genai.types.GenerationConfig(
-                    temperature=0.2, 
+                    temperature=0.0, 
                     max_output_tokens=1000,
                 )
             )
@@ -515,7 +555,6 @@ def ask_api_view(request):
             try:
                 cleaned_response = gemini_raw_response.strip()
 
-                # --- logic extract json from response ---
                 json_start_index = cleaned_response.find('```json')
                 json_end_index = cleaned_response.rfind('```')
 
@@ -536,13 +575,10 @@ def ask_api_view(request):
 
                 parsed_response = json.loads(cleaned_response)
 
-                print(f"DEBUG: Resposta limpa para JSON.loads: {cleaned_response[:1000]}...")
-                parsed_response = json.loads(cleaned_response)
                 final_answer_text = parsed_response.get('resposta_final', 'Não foi possível gerar uma resposta.')
                 diagnostico_text = parsed_response.get('diagnostico', '').strip()
                 plano_de_acao_text = parsed_response.get('plano_de_acao', '').strip()
                 dados_analisados_json = parsed_response.get('dados_analisados', {})
-
 
                 full_response_for_user = final_answer_text
                 if diagnostico_text and diagnostico_text.lower() not in ['Não aplicável', 'não aplicavel', 'n/a', 'na']:
@@ -551,6 +587,8 @@ def ask_api_view(request):
                 if plano_de_acao_text and plano_de_acao_text.lower() not in ['Não aplicável', 'não aplicavel', 'n/a', 'na']:
                     full_response_for_user += f"\n\nPlano de Ação:\n{plano_de_acao_text}"
                 
+                # 3. Session ChatMessage
+                ChatMessage.objects.create(session_id=session_id, role='assistant', content=full_response_for_user)
 
                 return JsonResponse({
                     'answer': full_response_for_user,
@@ -560,21 +598,70 @@ def ask_api_view(request):
                 }, status=200)
 
             except json.JSONDecodeError:
-                print(f"ERROR: Gemini não retornou um JSON válido: {gemini_raw_response}")
+                print(f"ERROR: Gemini não retornou um JSON válido. Resposta bruta: {gemini_raw_response}")
+                # History session Error message
+                ChatMessage.objects.create(session_id=session_id, role='assistant', content='Erro: Resposta inválida do servidor de IA.')
                 return JsonResponse({'answer': 'Desculpe, tive um problema ao processar sua solicitação. Por favor, tente novamente.'}, status=500)
-            except ValueError as ve: # Captching ValueErrors
-                 print(f"ERROR: Erro de processamento da resposta do Gemini: {ve}. Resposta original: {gemini_raw_response}")
-                 return JsonResponse({'answer': 'Desculpe, a resposta da inteligência artificial não pôde ser processada. Por favor, tente novamente.'}, status=500)
-            except Exception as e: # Catch all other potential errors during parsing/processing
+            except ValueError as ve:
+                print(f"ERROR: Erro de processamento da resposta do Gemini: {ve}. Resposta original: {gemini_raw_response}")
+                ChatMessage.objects.create(session_id=session_id, role='assistant', content='Erro: A resposta da IA não pôde ser interpretada.')
+                return JsonResponse({'answer': 'Desculpe, a resposta da inteligência artificial não pôde ser processada. Por favor, tente novamente.'}, status=500)
+            except Exception as e:
                 print(f"ERROR: Erro inesperado ao processar resposta do Gemini: {e}. Resposta original: {gemini_raw_response}")
+                ChatMessage.objects.create(session_id=session_id, role='assistant', content=f'Erro inesperado: {str(e)}.')
                 return JsonResponse({'answer': 'Ocorreu um erro inesperado ao interpretar a resposta. Por favor, tente novamente.'}, status=500)
 
         except Exception as e:
-            print(f"ERROR: {e}")
-            return JsonResponse({'answer': f'Ocorreu um erro inesperado: {str(e)}'}, status=500)
+            print(f"ERROR: Erro na ask_api_view: {e}")
+            return JsonResponse({'answer': f'Ocorreu um erro inesperado no servidor: {str(e)}'}, status=500)
     
     return JsonResponse({'answer': 'Método não permitido.'}, status=405)
 
+def get_aggregated_metrics(df):
+    metrics = {}
+    
+    if df.empty:
+        metrics['total_vendas_concluidas'] = 0.0
+        metrics['total_vendas_pendentes'] = 0.0
+        metrics['total_contas_recebidas'] = 0.0
+        metrics['total_contas_receber_aberto_atrasado'] = 0.0
+        metrics['total_contas_pagar_aberto_atrasado'] = 0.0
+        metrics['quantidade_vendas_concluidas'] = 0
+        metrics['quantidade_vendas_pendentes'] = 0
+        return metrics
+
+    vendas_df = df[df['tipo_registro'] == 'Venda']
+    
+    metrics['total_vendas_concluidas'] = vendas_df[vendas_df['status_venda_code'] == 'CONCLUIDA']['valor_total_venda'].sum()
+    metrics['total_vendas_concluidas'] = round(float(metrics['total_vendas_concluidas']), 2) 
+
+    metrics['total_vendas_pendentes'] = vendas_df[vendas_df['status_venda_code'] == 'PENDENTE']['valor_total_venda'].sum()
+    metrics['total_vendas_pendentes'] = round(float(metrics['total_vendas_pendentes']), 2)
+
+    metrics['quantidade_vendas_concluidas'] = vendas_df[vendas_df['status_venda_code'] == 'CONCLUIDA'].shape[0]
+    
+    metrics['quantidade_vendas_pendentes'] = vendas_df[vendas_df['status_venda_code'] == 'PENDENTE'].shape[0]
+
+    contas_receber_df = df[df['tipo_registro'] == 'ContaReceber']
+    
+    metrics['total_contas_recebidas'] = contas_receber_df[contas_receber_df['status_conta_receber'] == 'RECEBIDO']['valor_conta_receber'].sum()
+    metrics['total_contas_recebidas'] = round(float(metrics['total_contas_recebidas']), 2)
+
+    metrics['total_contas_receber_aberto_atrasado'] = contas_receber_df[
+        (contas_receber_df['status_conta_receber'] == 'ABERTO') | 
+        (contas_receber_df['status_conta_receber'] == 'ATRASADO')
+    ]['valor_conta_receber'].sum()
+    metrics['total_contas_receber_aberto_atrasado'] = round(float(metrics['total_contas_receber_aberto_atrasado']), 2)
+
+    contas_pagar_df = df[df['tipo_registro'] == 'ContaPagar']
+    
+    metrics['total_contas_pagar_aberto_atrasado'] = contas_pagar_df[
+        (contas_pagar_df['status_conta_pagar'] == 'ABERTO') | 
+        (contas_pagar_df['status_conta_pagar'] == 'ATRASADO')
+    ]['valor_conta_pagar'].sum()
+    metrics['total_contas_pagar_aberto_atrasado'] = round(float(metrics['total_contas_pagar_aberto_atrasado']), 2)
+    
+    return metrics
 
 def get_dataframe_from_db():
     vendas_queryset = Venda.objects.select_related('produto', 'cliente')
@@ -612,7 +699,7 @@ def get_dataframe_from_db():
             "quantidade_vendida": cr.venda.quantidade if cr.venda else None, 
             "valor_total_venda": float(cr.venda.valor_total) if cr.venda and cr.venda.valor_total is not None else None, 
             "data_transacao": cr.venda.data_venda.strftime('%Y-%m-%d') if cr.venda else None, # Data base
-            "status_venda_code": cr.venda.status if cr.venda else None, # Status da venda associada
+            "status_venda_code": cr.venda.status if cr.venda else None, # Status venda 
             "status_venda_display": cr.venda.get_status_display() if cr.venda else None,
             "forma_pagamento": cr.venda.get_forma_pagamento_display() if cr.venda else None,
             "condicao_prazo": cr.venda.get_condicao_prazo_display() if cr.venda and cr.venda.condicao_prazo else "À Vista",
@@ -654,9 +741,11 @@ def get_dataframe_from_db():
     
     return df
 
-def create_unified_agent_prompt(question, df_json_str):
+def create_unified_agent_prompt(question, df_json_str, aggregated_metrics): 
+    aggregated_metrics_str = json.dumps(aggregated_metrics, indent=2)
+
     return f"""
-    Você é um assistente de negócios especializado em analisar dados de Vendas e Contas a Receber de uma empresa.
+    Você é um assistente de negócios especializado em analisar dados de Vendas, Contas a Receber e Contas a Pagar de uma empresa.
     Seu objetivo é responder às perguntas do usuário de forma precisa, com insights relevantes, diagnósticos e, quando apropriado, planos de ação.
     Você tem acesso a dados detalhados no formato JSON, representando um DataFrame pandas.
 
@@ -670,25 +759,34 @@ def create_unified_agent_prompt(question, df_json_str):
         -   `dados_analisados`: (Objeto JSON) Um resumo dos cálculos e métricas chave que você usou na sua análise. **Se a pergunta for de natureza conversacional ou não exigir análise de dados, este campo deve ser um objeto JSON vazio ({{}}).**
     4.  **CONDICIONALIDADE DE ANÁLISE/AÇÃO:** `diagnostico` e `plano_de_acao` SÃO OPCIONAIS e devem ser preenchidos APENAS quando a INTENÇÃO do usuário indicar uma solicitação de análise profunda ou recomendação de ação. Para perguntas simples de dados (ex: "Quantas vendas tivemos?", "Qual o valor da Conta a Pagar X?"), deixe `diagnostico` e `plano_de_acao` vazios.
     5.  **SEMPRE UM JSON VÁLIDO:** O retorno DEVE ser um JSON válido.
+    6. **PRIORIZE FATOS AGREGADOS:** Para perguntas sobre **valores totais, quantidades totais ou somas de categorias específicas**, você **DEVE** utilizar os `Fatos Agregados` fornecidos abaixo. **NÃO tente somar os dados brutos do `DataFrame JSON` para essas perguntas, pois os `Fatos Agregados` já são os valores precisos e finais.**
     ---
 
-    **Dados Disponíveis (DataFrame JSON - primeiras 50 linhas ou filtrado para relevância):**
+    **Fatos Agregados Pré-Calculados (Sempre use para perguntas de totalização):**
+    ```json
+    {aggregated_metrics_str}
+    ```
+
+    ---
+
+    **Dados Detalhados Disponíveis (DataFrame JSON - para análises mais profundas, se os fatos agregados não forem suficientes):**
     ```json
     {df_json_str}
     ```
 
-    **Colunas Disponíveis e Seus Tipos/Valores Importantes:**
+    **Colunas Disponíveis no DataFrame e Seus Tipos/Valores Importantes (para referência em análises detalhadas):**
     -   `tipo_registro`: "Venda", "ContaReceber", "ContaPagar" (use capitalização exata)
     -   `produto_nome`: Nome do produto.
     -   `cliente_nome`: Nome do cliente.
     -   `quantidade_vendida`: Quantidade de itens em uma venda.
     -   `valor_total_venda`: Valor monetário total de uma venda.
     -   `data_transacao`: Data da venda ou transação.
-    -   `status_venda_code`: Status da venda (e.g., "P" para Pendente, "C" para Concluída - use capitalização exata).
+    -   `status_venda_code`: Status da venda (e.g., "CONCLUIDA", "PENDENTE" - use capitalização exata).
+    -   `status_conta_receber`: Status da conta a receber (e.g., "ABERTO", "RECEBIDO", "ATRASADO" - use capitalização exata).
     -   `valor_conta_receber`: Valor monetário de uma conta a receber.
-    -   `status_conta_receber`: Status da conta a receber (e.g., "ABERTO" ainda não foi pago, "RECEBIDO" está pago, "ATRASADO" está atrasado - use capitalização exata).
     -   `data_vencimento_receber`: Data de vencimento da conta a receber.
     -   `data_recebimento`: Data de recebimento da conta a receber.
+    -   `fornecedor_nome`: Nome do fornecedor.
     -   `valor_conta_pagar`: Valor monetário de uma conta a pagar.
     -   `status_conta_pagar`: Status da conta a pagar (e.g., "ABERTO", "PAGO", "ATRASADO" - use capitalização exata).
     -   `data_vencimento_pagar`: Data de vencimento da conta a pagar. 
@@ -713,3 +811,7 @@ def create_unified_agent_prompt(question, df_json_str):
     }}
     ```
     """
+    
+def logout_view(request):
+    logout(request)
+    return redirect('login')

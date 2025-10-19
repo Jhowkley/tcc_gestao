@@ -1,0 +1,284 @@
+[
+  {
+    "model": "core.fornecedor",
+    "pk": 6,
+    "fields": {
+      "nome_empresa": "Hidráulica Total",
+      "contato_nome": "Marcos Andrade",
+      "telefone": "(16) 3344-5566",
+      "email": "marcos@hidraulicatotal.com"
+    }
+  },
+  {
+    "model": "core.fornecedor",
+    "pk": 7,
+    "fields": {
+      "nome_empresa": "Borrachas Automotivas Sul",
+      "contato_nome": "Julia Martins",
+      "telefone": "(48) 98765-1234",
+      "email": "vendas.sc@borrachassul.com.br"
+    }
+  },
+  {
+    "model": "core.cliente",
+    "pk": 5,
+    "fields": {
+      "nome": "Peças & Cia Araguari",
+      "telefone": "(34) 3242-8090",
+      "email": "compras@pecaseciaaraguari.com",
+      "endereco": "Av. Brasil, 500, Araguari/MG",
+      "data_cadastro": "2023-02-01T08:00:00Z"
+    }
+  },
+  {
+    "model": "core.cliente",
+    "pk": 6,
+    "fields": {
+      "nome": "Ituiutaba Diesel Peças",
+      "telefone": "(34) 3268-4050",
+      "email": "contato@itbpecas.com.br",
+      "endereco": "Rua Vinte e Dois, 1500, Ituiutaba/MG",
+      "data_cadastro": "2023-09-11T11:20:00Z"
+    }
+  },
+  {
+    "model": "core.cliente",
+    "pk": 7,
+    "fields": {
+      "nome": "Monte Alegre Autopeças",
+      "telefone": "(34) 99654-3210",
+      "email": "map@email.com",
+      "endereco": "Av. Central, 123, Monte Alegre de Minas/MG",
+      "data_cadastro": "2024-03-18T16:00:00Z"
+    }
+  },
+  {
+    "model": "core.categoria",
+    "pk": 4,
+    "fields": {
+      "nome": "Mangueiras Hidráulicas",
+      "descricao": "Mangueiras para sistemas de direção hidráulica e outras aplicações de alta pressão."
+    }
+  },
+  {
+    "model": "core.produto",
+    "pk": 6,
+    "fields": {
+      "nome": "Mangueira Direção Hidráulica S10",
+      "descricao": "Mangueira de pressão para direção hidráulica da Chevrolet S10 2.8 Diesel",
+      "fornecedor": 6,
+      "categoria": 4,
+      "preco_compra": "85.00",
+      "preco_venda": "155.00",
+      "quantidade_estoque": 40,
+      "data_cadastro": "2023-02-10T10:00:00Z"
+    }
+  },
+  {
+    "model": "core.produto",
+    "pk": 7,
+    "fields": {
+      "nome": "Mangueira Ar Condicionado Civic",
+      "descricao": "Mangueira de alta pressão do sistema de ar condicionado para Honda Civic 2012-2016",
+      "fornecedor": 7,
+      "categoria": 4,
+      "preco_compra": "110.00",
+      "preco_venda": "210.50",
+      "quantidade_estoque": 25,
+      "data_cadastro": "2023-10-01T09:30:00Z"
+    }
+  },
+  {
+    "model": "core.contapagar",
+    "pk": 2,
+    "fields": {
+      "fornecedor": 6,
+      "descricao": "NF 4561 - Compra Mangueiras S10",
+      "valor": "3400.00",
+      "data_lancamento": "2024-04-15",
+      "data_vencimento": "2024-05-15",
+      "data_pagamento": "2024-05-14",
+      "status": "PAGO"
+    }
+  },
+  {
+    "model": "core.contapagar",
+    "pk": 3,
+    "fields": {
+      "fornecedor": 7,
+      "descricao": "Lote Mangueiras Ar Condicionado",
+      "valor": "2200.00",
+      "data_lancamento": "2025-08-10",
+      "data_vencimento": "2025-09-10",
+      "data_pagamento": null,
+      "status": "ATRASADO"
+    }
+  },
+  {
+    "model": "core.contapagar",
+    "pk": 4,
+    "fields": {
+      "fornecedor": 6,
+      "descricao": "NF 9876 - Reposição estoque hidráulico",
+      "valor": "4250.00",
+      "data_lancamento": "2025-10-10",
+      "data_vencimento": "2025-11-10",
+      "data_pagamento": null,
+      "status": "ABERTO"
+    }
+  },
+  {
+    "model": "core.venda",
+    "pk": 8,
+    "fields": {
+      "forma_pagamento": "AP",
+      "condicao_prazo": "28D",
+      "produto": 6,
+      "cliente": 5,
+      "quantidade": 10,
+      "valor_total": "1550.00",
+      "data_venda": "2023-04-10T14:00:00Z",
+      "status": "CONCLUIDA"
+    }
+  },
+  {
+    "model": "core.venda",
+    "pk": 9,
+    "fields": {
+      "forma_pagamento": "AP",
+      "condicao_prazo": "14D",
+      "produto": 7,
+      "cliente": 6,
+      "quantidade": 5,
+      "valor_total": "1052.50",
+      "data_venda": "2024-01-20T10:30:00Z",
+      "status": "CONCLUIDA"
+    }
+  },
+  {
+    "model": "core.venda",
+    "pk": 10,
+    "fields": {
+      "forma_pagamento": "AV",
+      "condicao_prazo": null,
+      "produto": 6,
+      "cliente": 7,
+      "quantidade": 3,
+      "valor_total": "465.00",
+      "data_venda": "2024-09-05T11:00:00Z",
+      "status": "CONCLUIDA"
+    }
+  },
+  {
+    "model": "core.venda",
+    "pk": 11,
+    "fields": {
+      "forma_pagamento": "AP",
+      "condicao_prazo": "28D",
+      "produto": 7,
+      "cliente": 5,
+      "quantidade": 8,
+      "valor_total": "1684.00",
+      "data_venda": "2025-03-15T09:15:00Z",
+      "status": "CONCLUIDA"
+    }
+  },
+  {
+    "model": "core.venda",
+    "pk": 12,
+    "fields": {
+      "forma_pagamento": "AP",
+      "condicao_prazo": "14D",
+      "produto": 6,
+      "cliente": 6,
+      "quantidade": 12,
+      "valor_total": "1860.00",
+      "data_venda": "2025-08-20T15:45:00Z",
+      "status": "CONCLUIDA"
+    }
+  },
+  {
+    "model": "core.venda",
+    "pk": 13,
+    "fields": {
+      "forma_pagamento": "AP",
+      "condicao_prazo": "7D",
+      "produto": 7,
+      "cliente": 7,
+      "quantidade": 2,
+      "valor_total": "421.00",
+      "data_venda": "2025-09-30T16:00:00Z",
+      "status": "PENDENTE"
+    }
+  },
+  {
+    "model": "core.contareceber",
+    "pk": 8,
+    "fields": {
+      "venda": 8,
+      "cliente": 5,
+      "descricao": "Recebimento da Venda #8 - Peças & Cia Araguari",
+      "valor": "1550.00",
+      "data_lancamento": "2023-04-10",
+      "data_vencimento": "2023-05-08",
+      "data_recebimento": "2023-05-05",
+      "status": "RECEBIDO"
+    }
+  },
+  {
+    "model": "core.contareceber",
+    "pk": 9,
+    "fields": {
+      "venda": 9,
+      "cliente": 6,
+      "descricao": "Recebimento da Venda #9 - Ituiutaba Diesel Peças",
+      "valor": "1052.50",
+      "data_lancamento": "2024-01-20",
+      "data_vencimento": "2024-02-03",
+      "data_recebimento": "2024-02-03",
+      "status": "RECEBIDO"
+    }
+  },
+  {
+    "model": "core.contareceber",
+    "pk": 10,
+    "fields": {
+      "venda": 11,
+      "cliente": 5,
+      "descricao": "Recebimento da Venda #11 - Peças & Cia Araguari",
+      "valor": "1684.00",
+      "data_lancamento": "2025-03-15",
+      "data_vencimento": "2025-04-12",
+      "data_recebimento": "2025-04-10",
+      "status": "RECEBIDO"
+    }
+  },
+  {
+    "model": "core.contareceber",
+    "pk": 11,
+    "fields": {
+      "venda": 12,
+      "cliente": 6,
+      "descricao": "Recebimento da Venda #12 - Ituiutaba Diesel Peças",
+      "valor": "1860.00",
+      "data_lancamento": "2025-08-20",
+      "data_vencimento": "2025-09-03",
+      "data_recebimento": null,
+      "status": "ATRASADO"
+    }
+  },
+  {
+    "model": "core.contareceber",
+    "pk": 12,
+    "fields": {
+      "venda": 13,
+      "cliente": 7,
+      "descricao": "Recebimento da Venda #13 - Monte Alegre Autopeças",
+      "valor": "421.00",
+      "data_lancamento": "2025-09-30",
+      "data_vencimento": "2025-10-07",
+      "data_recebimento": null,
+      "status": "ABERTO"
+    }
+  }
+]

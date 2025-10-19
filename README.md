@@ -5,7 +5,7 @@ Este projeto é uma solução de gestão de sistemas que integra um chatbot inte
 ## Funcionalidades
 
 - Chatbot inteligente para análise de dados do sistema
-- Integração com PandasAI para respostas analíticas
+- Integração com Pandas para respostas analíticas
 - Interface web moderna e responsiva
 
 ## Tecnologias Utilizadas

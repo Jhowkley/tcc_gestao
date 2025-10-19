@@ -10,7 +10,7 @@ Este projeto é uma solução de gestão de sistemas que integra um chatbot inte
 
 ## Tecnologias Utilizadas
 
-- **Backend:** Python, Django, PandasAI
+- **Backend:** Python, Django, Pandas
 - **Frontend:** HTML, CSS, JavaScript
 - **LLM:** Google Gemini (gemini-2.0-flash)
 

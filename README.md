@@ -32,7 +32,7 @@ Este projeto é uma solução de gestão de sistemas que integra um chatbot inte
     ```
 3. **Banco de Dados:**
     ```bash
-    Ao clonar o repértorio aplique as migrations pata gerar o arquivo `db.sqlite3`
+    Ao clonar o repértorio aplique as migrations para gerar o arquivo `db.sqlite3`
     ```
 3. **Instale as dependências:**
     ```bash

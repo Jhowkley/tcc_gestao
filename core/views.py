@@ -407,7 +407,7 @@ def conta_receber_form_view(request, pk=None):
     return render(request, 'core/form_generico.html', {'form': form, 'titulo': titulo})
 
 @login_required
-def conta_receber_delete_view(request, pk): # Adicionado
+def conta_receber_delete_view(request, pk): 
     conta = get_object_or_404(ContaReceber, pk=pk)
     if request.method == 'POST':
         conta.delete()
@@ -490,41 +490,30 @@ def ask_api_view(request):
         try:
             data = json.loads(request.body)
             question = data.get('question', '').strip()
-            session_id = data.get('session_id') # Este session_id é crucial para o histórico
+            session_id = data.get('session_id') 
 
             if not question:
                 return JsonResponse({'answer': 'Por favor, faça uma pergunta.'}, status=400)
             
             if not session_id:
-                # Se não houver session_id, é um problema, pois precisamos dele para o histórico
                 return JsonResponse({'answer': 'Erro: ID de sessão não fornecido.'}, status=400)
 
-            # 1. Salvar a mensagem do USUÁRIO (pergunta)
             ChatMessage.objects.create(session_id=session_id, role='user', content=question)
 
-            # 2. Recuperar o histórico da conversa para esta sessão
-            # Ordenamos por timestamp para garantir que a ordem das mensagens seja mantida
             history_messages = ChatMessage.objects.filter(session_id=session_id).order_by('timestamp')
             
-            # Formatamos o histórico para o formato esperado pelo Gemini
-            # O histórico precisa ser uma lista de dicionários com 'role' e 'parts'
-            # Gemini espera 'user' e 'model' para o role
+            
             gemini_history = []
             for msg in history_messages:
-                # A resposta do Gemini no histórico anterior é 'assistant' para nós,
-                # mas deve ser 'model' para o Gemini ao recarregar o histórico.
-                # A pergunta do usuário é 'user' em ambos.
                 gemini_history.append({
                     'role': 'user' if msg.role == 'user' else 'model', 
                     'parts': [msg.content]
                 })
 
-            # Adicione um print para depuração do histórico
             print(f"DEBUG: Histórico de chat para session_id {session_id}:")
             for h_msg in gemini_history:
-                print(f"  - {h_msg['role']}: {h_msg['parts'][0][:100]}...") # Limita para não poluir muito
-
-            # Obtenha o DataFrame do banco de dados (sua lógica existente)
+                print(f"  - {h_msg['role']}: {h_msg['parts'][0][:100]}...") 
+                
             df = get_dataframe_from_db()
             agreggated_metrics = get_aggregated_metrics(df) 
 
@@ -538,19 +527,18 @@ def ask_api_view(request):
                 ]
                 df_relevant = df[relevant_cols].head(50)
                 
-                for col in ['data_transacao', 'data_vencimento_receber', 'data_recebimento', 'data_vencimento_pagar', 'data_lancamento_pagar', 'data_pagamento_pagar']: #
+                for col in ['data_transacao', 'data_vencimento_receber', 'data_recebimento', 'data_vencimento_pagar', 'data_lancamento_pagar', 'data_pagamento_pagar']: 
                     if col in df_relevant.columns:
                         df_relevant[col] = df_relevant[col].dt.strftime('%Y-%m-%d %H:%M:%S').fillna('N/A')
 
                 df_for_gemini_str = df_relevant.to_json(orient="records", date_format="iso")
                 print(f"DEBUG: DataFrame para Gemini (primeiras 50 linhas): {df_for_gemini_str[:500]}...")
 
-            # O prompt do agente deve incluir a pergunta atual do usuário.
-            # O histórico será passado para o `start_chat`.
+            
             agent_prompt = create_unified_agent_prompt(question, df_for_gemini_str, agreggated_metrics)
             print(f"DEBUG: Prompt Único para Gemini: \n{agent_prompt[:2000]}...")
 
-            # Iniciar o chat com o histórico recuperado
+            # start the chat with the history
             chat = model.start_chat(history=gemini_history) 
             
             response = chat.send_message(
@@ -599,7 +587,7 @@ def ask_api_view(request):
                 if plano_de_acao_text and plano_de_acao_text.lower() not in ['Não aplicável', 'não aplicavel', 'n/a', 'na']:
                     full_response_for_user += f"\n\nPlano de Ação:\n{plano_de_acao_text}"
                 
-                # 3. Salvar a resposta da IA na tabela ChatMessage
+                # 3. Session ChatMessage
                 ChatMessage.objects.create(session_id=session_id, role='assistant', content=full_response_for_user)
 
                 return JsonResponse({
@@ -611,7 +599,7 @@ def ask_api_view(request):
 
             except json.JSONDecodeError:
                 print(f"ERROR: Gemini não retornou um JSON válido. Resposta bruta: {gemini_raw_response}")
-                # Salvar a mensagem de erro da IA se possível
+                # History session Error message
                 ChatMessage.objects.create(session_id=session_id, role='assistant', content='Erro: Resposta inválida do servidor de IA.')
                 return JsonResponse({'answer': 'Desculpe, tive um problema ao processar sua solicitação. Por favor, tente novamente.'}, status=500)
             except ValueError as ve:
@@ -642,41 +630,31 @@ def get_aggregated_metrics(df):
         metrics['quantidade_vendas_pendentes'] = 0
         return metrics
 
-    # --- Cálculos para Vendas ---
     vendas_df = df[df['tipo_registro'] == 'Venda']
     
-    # Total de Vendas Concluídas (valor)
     metrics['total_vendas_concluidas'] = vendas_df[vendas_df['status_venda_code'] == 'CONCLUIDA']['valor_total_venda'].sum()
-    metrics['total_vendas_concluidas'] = round(float(metrics['total_vendas_concluidas']), 2) # Arredondar para 2 casas decimais
+    metrics['total_vendas_concluidas'] = round(float(metrics['total_vendas_concluidas']), 2) 
 
-    # Total de Vendas Pendentes (valor)
     metrics['total_vendas_pendentes'] = vendas_df[vendas_df['status_venda_code'] == 'PENDENTE']['valor_total_venda'].sum()
     metrics['total_vendas_pendentes'] = round(float(metrics['total_vendas_pendentes']), 2)
 
-    # Quantidade de Vendas Concluídas (contagem de transações)
     metrics['quantidade_vendas_concluidas'] = vendas_df[vendas_df['status_venda_code'] == 'CONCLUIDA'].shape[0]
     
-    # Quantidade de Vendas Pendentes (contagem de transações)
     metrics['quantidade_vendas_pendentes'] = vendas_df[vendas_df['status_venda_code'] == 'PENDENTE'].shape[0]
 
-    # --- Cálculos para Contas a Receber ---
     contas_receber_df = df[df['tipo_registro'] == 'ContaReceber']
     
-    # Contas Recebidas (status 'RECEBIDO')
     metrics['total_contas_recebidas'] = contas_receber_df[contas_receber_df['status_conta_receber'] == 'RECEBIDO']['valor_conta_receber'].sum()
     metrics['total_contas_recebidas'] = round(float(metrics['total_contas_recebidas']), 2)
 
-    # Contas a Receber (status 'ABERTO' ou 'ATRASADO')
     metrics['total_contas_receber_aberto_atrasado'] = contas_receber_df[
         (contas_receber_df['status_conta_receber'] == 'ABERTO') | 
         (contas_receber_df['status_conta_receber'] == 'ATRASADO')
     ]['valor_conta_receber'].sum()
     metrics['total_contas_receber_aberto_atrasado'] = round(float(metrics['total_contas_receber_aberto_atrasado']), 2)
 
-    # --- Cálculos para Contas a Pagar ---
     contas_pagar_df = df[df['tipo_registro'] == 'ContaPagar']
     
-    # Contas a Pagar (status 'ABERTO' ou 'ATRASADO')
     metrics['total_contas_pagar_aberto_atrasado'] = contas_pagar_df[
         (contas_pagar_df['status_conta_pagar'] == 'ABERTO') | 
         (contas_pagar_df['status_conta_pagar'] == 'ATRASADO')
@@ -721,7 +699,7 @@ def get_dataframe_from_db():
             "quantidade_vendida": cr.venda.quantidade if cr.venda else None, 
             "valor_total_venda": float(cr.venda.valor_total) if cr.venda and cr.venda.valor_total is not None else None, 
             "data_transacao": cr.venda.data_venda.strftime('%Y-%m-%d') if cr.venda else None, # Data base
-            "status_venda_code": cr.venda.status if cr.venda else None, # Status da venda associada
+            "status_venda_code": cr.venda.status if cr.venda else None, # Status venda 
             "status_venda_display": cr.venda.get_status_display() if cr.venda else None,
             "forma_pagamento": cr.venda.get_forma_pagamento_display() if cr.venda else None,
             "condicao_prazo": cr.venda.get_condicao_prazo_display() if cr.venda and cr.venda.condicao_prazo else "À Vista",
@@ -763,9 +741,7 @@ def get_dataframe_from_db():
     
     return df
 
-# Adicione `aggregated_metrics` como um argumento
 def create_unified_agent_prompt(question, df_json_str, aggregated_metrics): 
-    # Converta o dicionário de métricas para uma string JSON formatada para o prompt
     aggregated_metrics_str = json.dumps(aggregated_metrics, indent=2)
 
     return f"""

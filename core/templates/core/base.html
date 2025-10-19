@@ -23,18 +23,16 @@
             margin: 0; 
             background-color: var(--content-bg);
             height: 100vh;
-            /* overflow: hidden;  overflow main-content */
         }
         .app-wrapper { 
             display: flex; 
             height: 100%;
-            overflow-x: hidden; /* Evita barra horizontal ao colapsar sidebar */
+            overflow-x: hidden;
         }
         .app-wrapper.sidebar-collapsed .main-container {
-             margin-left: 0; /* Ajusta o main-container para começar no 0 */
+             margin-left: 0; 
         }
 
-        /* --- Sidebar (Navigation) --- */
         #sidebar {
             width: var(--sidebar-width);
             background-color: var(--sidebar-bg);
@@ -44,9 +42,9 @@
             flex-shrink: 0;
             height: 100%;
             transition: margin-left 0.3s ease-in-out;
-            overflow-y: auto; /* Permite rolagem se muitos itens */
+            overflow-y: auto;
             position: relative;
-            z-index: 100; /* Garante que a sidebar fique acima do conteúdo principal */
+            z-index: 100; 
         }
         #sidebar.collapsed { width: var(--collapsed-sidebar-width); overflow: hidden; 
             white-space: nowrap; }
@@ -66,7 +64,6 @@
         .sidebar-nav a.active { background-color: var(--primary-color); color: var(--sidebar-text-hover); }
         .sidebar-nav a i { width: 20px; text-align: center; }
 
-        /* --- Conteúdo Principal e Header --- */
         .main-container {flex: 1; display: flex; flex-direction: column; transition: margin-left 0.3s ease-in-out; }
         #top-header {
             display: flex;
@@ -74,7 +71,7 @@
             padding: 15px 30px;
             background-color: #fff;
             border-bottom: 1px solid var(--border-color);
-            flex-shrink: 0; /* Impede que o header encolha */
+            flex-shrink: 0; 
         }
         #sidebar-toggle { background: none; border: none; font-size: 24px; cursor: pointer; padding-right: 20px; }
         .header-title { font-size: 28px; font-weight: bold; margin-left: 20px; }
@@ -83,9 +80,8 @@
         .user-info span { display: block; }
         .user-info .email { font-size: 12px; color: #6b7280; }
 
-        .main-content { flex-grow: 1; padding: 30px; overflow-y: auto; overflow-x: hidden; /* Conteúdo rola aqui */ }
+        .main-content { flex-grow: 1; padding: 30px; overflow-y: auto; overflow-x: hidden;  }
 
-        /* --- Estilos Gerais para Cards e Tabelas (úteis para todos os templates) --- */
         .page-header {
             display: flex;
             justify-content: space-between;
@@ -107,10 +103,10 @@
             transition: background-color 0.2s;
         }
         .btn:hover {
-            background-color: #4338ca; /* Um tom mais escuro de roxo */
+            background-color: #4338ca; 
         }
         .btn-success {
-            background-color: #16a34a; /* Verde */
+            background-color: #16a34a; 
         }
         .btn-success:hover {
             background-color: #15803d;
@@ -132,8 +128,8 @@
         .styled-table thead th {
             text-align: left;
             padding: 12px 15px;
-            background-color: #f9fafb; /* Cinza bem claro */
-            color: #6b7280; /* Cinza escuro */
+            background-color: #f9fafb; 
+            color: #6b7280; 
             font-weight: 600;
             border-bottom: 2px solid var(--border-color);
         }
@@ -156,7 +152,7 @@
             text-decoration: underline;
         }
         .status-pendente, .status-aberto {
-            background-color: #fcd34d; /* Amarelo */
+            background-color: #fcd34d; 
             color: #92400e;
             padding: 3px 8px;
             border-radius: 4px;
@@ -164,7 +160,7 @@
             font-weight: 500;
         }
         .status-pago, .status-recebido {
-            background-color: #a7f3d0; /* Verde */
+            background-color: #a7f3d0; 
             color: #065f46;
             padding: 3px 8px;
             border-radius: 4px;
@@ -172,7 +168,7 @@
             font-weight: 500;
         }
         .status-atrasado {
-            background-color: #fecaca; /* Vermelho */
+            background-color: #fecaca;
             color: #991b1b;
             padding: 3px 8px;
             border-radius: 4px;
@@ -181,7 +177,7 @@
         }
         /* #chat-toggle-button, #chatbot-container-wrapper, #chatbot-header, #chat-messages,
            #chat-form, #chat-input, #chat-submit, .message, .user-message, .bot-message,
-           #typing-indicator, #typing-indicator .dot { display: none; } /* ou remova completamente se não for necessário */
+           #typing-indicator, #typing-indicator .dot { display: none; } 
     </style>
 </head>
 <body>

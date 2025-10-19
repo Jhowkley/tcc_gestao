@@ -17,10 +17,10 @@
         padding: 20px;
         display: flex;
         flex-direction: column;
-        align-items: flex-start; /* Alinha o texto à esquerda */
+        align-items: flex-start; 
         box-shadow: 0 4px 8px rgba(0,0,0,0.05);
         transition: transform 0.2s;
-        min-height: 120px; /* Garante altura mínima para todos */
+        min-height: 120px; 
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -36,7 +36,7 @@
     .kpi-card h3 {
         margin: 0 0 5px 0;
         color: #555;
-        font-size: 0.9em; /* Títulos menores */
+        font-size: 0.9em; 
     }
     .kpi-card p {
         font-size: 1.8em;
@@ -47,11 +47,11 @@
     .kpi-card.green .icon { color: #28a745; }
     .kpi-card.orange .icon { color: #ffc107; }
     .kpi-card.blue .icon { color: var(--primary-color); }
-    .kpi-card.red .icon { color: #dc3545; } /* Novo para Contas a Receber em Aberto */
+    .kpi-card.red .icon { color: #dc3545; } 
 
     .dashboard-charts-products {
         display: grid;
-        grid-template-columns: 2fr 1fr; /* Gráfico maior, produtos menor */
+        grid-template-columns: 2fr 1fr; 
         gap: 20px;
     }
 
@@ -60,7 +60,7 @@
         border-radius: 8px;
         padding: 20px;
         box-shadow: 0 4px 8px rgba(0,0,0,0.05);
-        height: 400px; /* Altura fixa para o gráfico */
+        height: 400px;
     }
     canvas#revenueChart {
        max-height: 100%;
@@ -99,7 +99,7 @@
         color: #333;
     }
     .products-card .product-qty {
-        background-color: #e0e7ff; /* Um azul claro */
+        background-color: #e0e7ff; 
         color: var(--primary-color);
         padding: 4px 8px;
         border-radius: 4px;
@@ -133,7 +133,7 @@
         transform: scale(1.05);
     }
     #chat-window {
-        display: none; /* Inicialmente escondida */
+        display: none; 
         position: absolute;
         bottom: 75px; /* Acima do botão */
         right: 0;
@@ -154,7 +154,7 @@
         align-items: center;
         font-size: 1.1em;
     }
-    .chat-header .close-btn { /* Use a classe para estilo, ID para JS */
+    .chat-header .close-btn { /* estilo, ID para JS */
         background: none;
         border: none;
         color: white;
@@ -186,7 +186,7 @@
         color: #333;
         align-self: flex-start;
     }
-    .chat-input { /* Agora esta classe é do FORM */
+    .chat-input { /* FORM */
         display: flex;
         padding: 10px 15px;
         border-top: 1px solid #eee;

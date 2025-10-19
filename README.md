@@ -1,6 +1,6 @@
 # Projeto de Gestão de Sistemas
 
-Este projeto é uma solução de gestão de sistemas que integra um chatbot inteligente utilizando **PandasAI** como analista e LLM da Gemini como motor (IA). O backend é desenvolvido em **Python** com o framework **Django**, enquanto o frontend utiliza **HTML**, **CSS** e **JavaScript**. Este projeto foi desenvolvido para uma apresentação de Projeto de Conclusão de Curso para o titulo de Análise e Desenvolvimento de Sistemas. É uma breve demonstração de como uma IA pode ser treinada para facilitar e acelerar resultados de processos repentinos, trazendo insights, planos de ação e acelerando busca de resultados para crescimento do negócio (empresa).
+Este projeto é uma solução de gestão de sistemas que integra um chatbot inteligente utilizando **Pandas** como analista e LLM da Gemini como motor (IA). O backend é desenvolvido em **Python** com o framework **Django**, enquanto o frontend utiliza **HTML**, **CSS** e **JavaScript**. Este projeto foi desenvolvido para uma apresentação de Projeto de Conclusão de Curso para o titulo de Análise e Desenvolvimento de Sistemas. É uma breve demonstração de como uma IA pode ser treinada para facilitar e acelerar resultados de processos repentinos, trazendo insights, planos de ação e acelerando busca de resultados para crescimento do negócio (empresa).
 
 ## Funcionalidades
 

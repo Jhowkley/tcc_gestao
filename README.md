@@ -30,10 +30,7 @@ Este projeto é uma solução de gestão de sistemas que integra um chatbot inte
     # No Linux/Mac
     source venv/bin/activate
     ```
-3. **Banco de Dados:**
-    ```bash
-    Ao clonar o repértorio aplique as migrations para gerar o arquivo `db.sqlite3`
-    ```
+    
 3. **Instale as dependências:**
     ```bash
     pip install -r requirements.txt

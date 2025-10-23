@@ -10,7 +10,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, F
 from django.db.models.functions import TruncMonth
 from sqlglot import logger
 from .forms import ProdutoForm, ClienteForm, VendaForm, ContaReceberForm, ContaPagarForm, CategoriaForm, FornecedorForm 
@@ -628,6 +628,8 @@ def get_aggregated_metrics(df):
         metrics['total_contas_pagar_aberto_atrasado'] = 0.0
         metrics['quantidade_vendas_concluidas'] = 0
         metrics['quantidade_vendas_pendentes'] = 0
+        metrics['total_estoque_geral'] = 0
+        metrics['quantidade_total_produtos_cadastrados'] = 0
         return metrics
 
     vendas_df = df[df['tipo_registro'] == 'Venda']
@@ -661,12 +663,20 @@ def get_aggregated_metrics(df):
     ]['valor_conta_pagar'].sum()
     metrics['total_contas_pagar_aberto_atrasado'] = round(float(metrics['total_contas_pagar_aberto_atrasado']), 2)
     
+    produtos_df = df[df['tipo_registro'] == 'Produto']
+    
+    metrics['total_estoque_geral'] = produtos_df['estoque_atual'].sum()
+    metrics['total_estoque_geral'] = round(float(metrics['total_estoque_geral']), 2)
+    
+    metrics['quantidade_total_produtos_cadastrados'] = produtos_df.shape[0]
+    
     return metrics
 
 def get_dataframe_from_db():
     vendas_queryset = Venda.objects.select_related('produto', 'cliente')
     contas_receber_queryset = ContaReceber.objects.select_related('venda__produto', 'cliente', 'venda')
     contas_pagar_queryset = ContaPagar.objects.select_related('fornecedor')
+    produtos_queryset = Produto.objects.select_related('fornecedor', 'categoria')
     
 
     dados_vendas = []
@@ -686,6 +696,7 @@ def get_dataframe_from_db():
             # outers camps for consistency
             "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
             "fornecedor_nome": None, "valor_conta_pagar": None, "status_conta_pagar": None, "data_vencimento_pagar": None, "data_pagamento": None,
+            "estoque_atual": None, "preco_compra": None, "preco_venda_unitario": None, "categoria_nome": None
         })
 
     dados_contas_receber = []
@@ -707,6 +718,7 @@ def get_dataframe_from_db():
             "data_vencimento_receber": cr.data_vencimento.strftime('%Y-%m-%d'),
             "data_recebimento": cr.data_recebimento.strftime('%Y-%m-%d') if cr.data_recebimento else None,
             "fornecedor_nome": None, "valor_conta_pagar": None, "status_conta_pagar": None, "data_vencimento_pagar": None, "data_pagamento": None,
+            "estoque_atual": None, "preco_compra": None, "preco_venda_unitario": None, "categoria_nome": None
         })
     
     dados_contas_pagar = []
@@ -724,18 +736,38 @@ def get_dataframe_from_db():
             "produto_nome": None, "cliente_nome": None, "quantidade_vendida": None, "valor_total_venda": None,
             "data_transacao": None, "status_venda_code": None, "status_venda_display": None, "forma_pagamento": None, "condicao_prazo": None,
             "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
+            "estoque_atual": None, "preco_compra": None, "preco_venda_unitario": None, "categoria_nome": None
         })
     
+    dados_produtos = []
+    for p in produtos_queryset:
+        dados_produtos.append({
+            "tipo_registro": "Produto",
+            "id_origem": p.pk,
+            "produto_nome": p.nome,
+            "descricao_produto": p.descricao,
+            "fornecedor_nome": p.fornecedor.nome_empresa if p.fornecedor else "N/A",
+            "categoria_nome": p.categoria.nome if p.categoria else "N/A",
+            "preco_compra": float(p.preco_compra),
+            "preco_venda_unitario": float(p.preco_venda),
+            "estoque_atual": p.quantidade_estoque,
+            "data_cadastro_produto": p.data_cadastro.strftime('%Y-%m-%d %H:%M:%S'),
+            # other fields set to None for consistency
+            "cliente_nome": None, "quantidade_vendida": None, "valor_total_venda": None,
+            "data_transacao": None, "status_venda_code": None, "status_venda_display": None, "forma_pagamento": None, "condicao_prazo": None,
+            "valor_conta_receber": None, "status_conta_receber": None, "data_vencimento_receber": None, "data_recebimento": None,
+            "valor_conta_pagar": None, "status_conta_pagar": None, "data_vencimento_pagar": None, "data_pagamento": None,
+        })
 
-    df_list = dados_vendas + dados_contas_receber + dados_contas_pagar 
+    df_list = dados_vendas + dados_contas_receber + dados_contas_pagar + dados_produtos
     df = pd.DataFrame(df_list)
 
     if not df.empty:
         # convert typings for pandas
-        for col in ['data_transacao', 'data_vencimento_receber', 'data_recebimento', 'data_vencimento_pagar', 'data_pagamento']:
+        for col in ['data_transacao', 'data_vencimento_receber', 'data_recebimento', 'data_vencimento_pagar', 'data_pagamento', 'data_cadastro_produto']:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], errors='coerce')
-        for col in ['quantidade_vendida', 'valor_total_venda', 'valor_conta_receber', 'valor_conta_pagar']:
+        for col in ['quantidade_vendida', 'valor_total_venda', 'valor_conta_receber', 'valor_conta_pagar', 'estoque_atual', 'preco_compra', 'preco_venda_unitario']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     
@@ -745,19 +777,19 @@ def create_unified_agent_prompt(question, df_json_str, aggregated_metrics):
     aggregated_metrics_str = json.dumps(aggregated_metrics, indent=2)
 
     return f"""
-    Você é um assistente de negócios especializado em analisar dados de Vendas, Contas a Receber e Contas a Pagar de uma empresa.
+    Você é um assistente de negócios especializado em analisar dados de Vendas, Contas a Receber e Contas a Pagar e Produtos de uma empresa.
     Seu objetivo é responder às perguntas do usuário de forma precisa, com insights relevantes, diagnósticos e, quando apropriado, planos de ação.
     Você tem acesso a dados detalhados no formato JSON, representando um DataFrame pandas.
 
     **REGRAS CRÍTICAS (LEIA ATENTAMENTE E SIGA RIGOROSAMENTE):**
-    1.  **FOCO RESTRITO:** Sua análise deve se concentrar **EXCLUSIVAMENTE em Vendas, Contas a Receber e Contas a Pagar**. 
-    2.  **DADOS REAIS:** Use **SOMENTE** os dados fornecidos no JSON. **NÃO INVENTE, ADIVINHE OU FABRIQUE DADOS, NOMES (clientes, produtos), VALORES, OU CENÁRIOS QUE NÃO ESTEJAM NO JSON OU IMPLÍCITOS NELE.**
+    1.  **FOCO RESTRITO:** Sua análise deve se concentrar **EXCLUSIVAMENTE em Vendas, Contas a Receber e Contas a Pagar e Produtos**.
+    2.  **DADOS REAIS:** Use **SOMENTE** os dados fornecidos no JSON. **NÃO INVENTE, ADIVINHE OU FABRIQUE DADOS, NOMES (clientes, produtos, fornecedores), VALORES, OU CENÁRIOS QUE NÃO ESTEJAM NO JSON OU IMPLÍCITOS NELE.**
     3.  **FORMULAÇÃO DA RESPOSTA:** Sempre retorne sua resposta como um objeto JSON. Este JSON DEVE ter as seguintes chaves:
         -   `resposta_final`: (String) Uma resposta direta e conversacional à pergunta do usuário. Inclua números formatados (R$ X,XX, Y unidades).
         -   `diagnostico`: (String) Um diagnóstico conciso e factual baseado nos dados analisados, identificando pontos fortes, fracos, ou tendências. **Preencha este campo APENAS se a pergunta do usuário solicitar explicitamente uma análise, diagnóstico, ou insights aprofundados.** Caso contrário, deve ser uma string vazia ("").
         -   `plano_de_acao`: (String) Sugestões de ações práticas e acionáveis que o gestor pode tomar com base na análise. Seja específico e use os dados (nomes de produtos, clientes, fornecedores) do `dados_analisados` se relevante. Se o resultado indicar falta de dados para uma ação, mencione isso. **Preencha este campo APENAS se a pergunta do usuário solicitar explicitamente um plano de ação, recomendações, ou "o que devo fazer?".** Caso contrário, deve ser uma string vazia ("").
         -   `dados_analisados`: (Objeto JSON) Um resumo dos cálculos e métricas chave que você usou na sua análise. **Se a pergunta for de natureza conversacional ou não exigir análise de dados, este campo deve ser um objeto JSON vazio ({{}}).**
-    4.  **CONDICIONALIDADE DE ANÁLISE/AÇÃO:** `diagnostico` e `plano_de_acao` SÃO OPCIONAIS e devem ser preenchidos APENAS quando a INTENÇÃO do usuário indicar uma solicitação de análise profunda ou recomendação de ação. Para perguntas simples de dados (ex: "Quantas vendas tivemos?", "Qual o valor da Conta a Pagar X?"), deixe `diagnostico` e `plano_de_acao` vazios.
+    4.  **CONDICIONALIDADE DE ANÁLISE/AÇÃO:** `diagnostico` e `plano_de_acao` SÃO OPCIONAIS e devem ser preenchidos APENAS quando a INTENÇÃO do usuário indicar uma solicitação de análise profunda ou recomendação de ação. Para perguntas simples de dados (ex: "Quantas vendas tivemos?", "Qual o valor da Conta a Pagar X?", "Quantos produtos temos em estoque?"), deixe `diagnostico` e `plano_de_acao` vazios.
     5.  **SEMPRE UM JSON VÁLIDO:** O retorno DEVE ser um JSON válido.
     6. **PRIORIZE FATOS AGREGADOS:** Para perguntas sobre **valores totais, quantidades totais ou somas de categorias específicas**, você **DEVE** utilizar os `Fatos Agregados` fornecidos abaixo. **NÃO tente somar os dados brutos do `DataFrame JSON` para essas perguntas, pois os `Fatos Agregados` já são os valores precisos e finais.**
     ---
@@ -775,22 +807,29 @@ def create_unified_agent_prompt(question, df_json_str, aggregated_metrics):
     ```
 
     **Colunas Disponíveis no DataFrame e Seus Tipos/Valores Importantes (para referência em análises detalhadas):**
-    -   `tipo_registro`: "Venda", "ContaReceber", "ContaPagar" (use capitalização exata)
-    -   `produto_nome`: Nome do produto.
-    -   `cliente_nome`: Nome do cliente.
-    -   `quantidade_vendida`: Quantidade de itens em uma venda.
-    -   `valor_total_venda`: Valor monetário total de uma venda.
-    -   `data_transacao`: Data da venda ou transação.
-    -   `status_venda_code`: Status da venda (e.g., "CONCLUIDA", "PENDENTE" - use capitalização exata).
-    -   `status_conta_receber`: Status da conta a receber (e.g., "ABERTO", "RECEBIDO", "ATRASADO" - use capitalização exata).
-    -   `valor_conta_receber`: Valor monetário de uma conta a receber.
-    -   `data_vencimento_receber`: Data de vencimento da conta a receber.
-    -   `data_recebimento`: Data de recebimento da conta a receber.
-    -   `fornecedor_nome`: Nome do fornecedor.
-    -   `valor_conta_pagar`: Valor monetário de uma conta a pagar.
-    -   `status_conta_pagar`: Status da conta a pagar (e.g., "ABERTO", "PAGO", "ATRASADO" - use capitalização exata).
-    -   `data_vencimento_pagar`: Data de vencimento da conta a pagar. 
-    -   `data_pagamento`: Data de pagamento da conta a pagar. 
+    -   `tipo_registro`: "Venda", "ContaReceber", "ContaPagar", **"Produto"** (use capitalização exata)
+    -   `id_origem`: ID único do registro (Venda, Conta, Produto).
+    -   `produto_nome`: Nome do produto. (Presente em Venda, ContaReceber, Produto)
+    -   `cliente_nome`: Nome do cliente. (Presente em Venda, ContaReceber)
+    -   `fornecedor_nome`: Nome do fornecedor. (Presente em ContaPagar, Produto)
+    -   `categoria_nome`: Nome da categoria do produto. (Presente em Produto)
+    -   `descricao_produto`: Descrição detalhada do produto. (Presente em Produto)
+    -   `quantidade_vendida`: Quantidade de itens em uma venda. (Presente em Venda, ContaReceber)
+    -   `valor_total_venda`: Valor monetário total de uma venda. (Presente em Venda, ContaReceber)
+    -   `data_transacao`: Data da venda ou transação. (Presente em Venda, ContaReceber)
+    -   `status_venda_code`: Status da venda (e.g., "CONCLUIDA", "PENDENTE" - use capitalização exata). (Presente em Venda, ContaReceber)
+    -   `status_conta_receber`: Status da conta a receber (e.g., "ABERTO", "RECEBIDO", "ATRASADO" - use capitalização exata). (Presente em ContaReceber)
+    -   `valor_conta_receber`: Valor monetário de uma conta a receber. (Presente em ContaReceber)
+    -   `data_vencimento_receber`: Data de vencimento da conta a receber. (Presente em ContaReceber)
+    -   `data_recebimento`: Data de recebimento da conta a receber. (Presente em ContaReceber)
+    -   `valor_conta_pagar`: Valor monetário de uma conta a pagar. (Presente em ContaPagar)
+    -   `status_conta_pagar`: Status da conta a pagar (e.g., "ABERTO", "PAGO", "ATRASADO" - use capitalização exata). (Presente em ContaPagar)
+    -   `data_vencimento_pagar`: Data de vencimento da conta a pagar. (Presente em ContaPagar) 
+    -   `data_pagamento`: Data de pagamento da conta a pagar. (Presente em ContaPagar)
+    -   `estoque_atual`: Quantidade de unidades em estoque do produto. (Presente em Produto)
+    -   `preco_compra`: Preço de custo unitário do produto. (Presente em Produto)
+    -   `preco_venda_unitario`: Preço de venda unitário do produto. (Presente em Produto)
+    -   `data_cadastro_produto`: Data de cadastro do produto. (Presente em Produto)
 
     ---
 

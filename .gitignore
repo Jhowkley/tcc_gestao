@@ -3,7 +3,6 @@
 __pycache__/
 media/
 staticfiles/
-static/
 .env
 *.log
 
@@ -45,6 +44,3 @@ nosetests.xml
 coverage.xml
 *.cover
 *.py,cover
-
-# Others
-node_modules/
